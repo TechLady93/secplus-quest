@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="SecPlus Quest logo">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#12306a"/><stop offset="1" stop-color="#070f24"/>
+    </linearGradient>
+    <linearGradient id="shield" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5eead4"/><stop offset="1" stop-color="#0d9488"/>
+    </linearGradient>
+    <linearGradient id="inner" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#142650"/><stop offset="1" stop-color="#0b1530"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe08a"/><stop offset="1" stop-color="#e0a82e"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- circuit traces -->
+  <g stroke="#2dd4bf" stroke-opacity=".28" stroke-width="6" fill="none" stroke-linecap="round">
+    <path d="M40 180h60l24-24"/><circle cx="132" cy="148" r="9" fill="#2dd4bf" fill-opacity=".35" stroke="none"/>
+    <path d="M472 332h-60l-24 24"/><circle cx="380" cy="364" r="9" fill="#2dd4bf" fill-opacity=".35" stroke="none"/>
+  </g>
+  <!-- shield -->
+  <path d="M256 70 L404 124 V246 C404 344 340 412 256 446 C172 412 108 344 108 246 V124 Z" fill="url(#shield)"/>
+  <path d="M256 102 L376 146 V248 C376 328 324 384 256 414 C188 384 136 328 136 248 V146 Z" fill="url(#inner)"/>
+  <!-- gold plus -->
+  <path d="M232 174h48v62h62v48h-62v62h-48v-62h-62v-48h62z" fill="url(#gold)" stroke="#7a5a12" stroke-opacity=".35" stroke-width="3" stroke-linejoin="round"/>
+  <!-- quest sparkles -->
+  <path d="M398 74l8 20 20 8-20 8-8 20-8-20-20-8 20-8z" fill="#f5c451"/>
+  <path d="M110 384l5 13 13 5-13 5-5 13-5-13-13-5 13-5z" fill="#f5c451" fill-opacity=".85"/>
+</svg>

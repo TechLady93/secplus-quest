@@ -129,7 +129,7 @@
   function topbar(extra) {
     const r = rankFor(state.xp);
     return `<div class="topbar">
-      <div class="brand" data-go="home" tabindex="0">🛡️ SecPlus <span>Quest</span></div>
+      <div class="brand" data-go="home" tabindex="0"><img src="assets/logo.svg" alt="" width="26" height="26" style="vertical-align:-6px;margin-right:6px">SecPlus <span>Quest</span></div>
       <div class="row">${extra || ""}
         <span class="chip gold" title="Experience points">${r.badge} ${state.xp} XP</span>
         <span class="chip" title="Daily streak">🔥 ${state.streakDays}</span>

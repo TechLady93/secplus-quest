@@ -1,4 +1,6 @@
-# 🛡️ SecPlus Quest
+<p align="center"><img src="assets/banner.png" alt="SecPlus Quest: gamified Security+ SY0-701 study app" width="100%"></p>
+
+# SecPlus Quest
 
 **A gamified, voice-enabled study app for the CompTIA Security+ SY0-701 exam.**
 

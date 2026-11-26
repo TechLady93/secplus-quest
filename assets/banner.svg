@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" role="img" aria-label="SecPlus Quest">
+  <defs>
+    <linearGradient id="bgb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#12306a"/><stop offset="1" stop-color="#070f24"/></linearGradient>
+    <radialGradient id="glow" cx=".78" cy=".1" r=".6"><stop offset="0" stop-color="#2dd4bf" stop-opacity=".18"/><stop offset="1" stop-color="#2dd4bf" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1280" height="640" fill="url(#bgb)"/>
+  <rect width="1280" height="640" fill="url(#glow)"/>
+  <g stroke="#2dd4bf" stroke-opacity=".14" stroke-width="3" fill="none">
+    <path d="M0 520h220l40-40h180"/><path d="M1280 120h-260l-40 40h-140"/><path d="M820 600v-60l40-40h420"/>
+  </g>
+  <image href="logo.svg" x="96" y="160" width="320" height="320"/>
+  <text x="470" y="300" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="104" font-weight="800" fill="#e8eefc">SecPlus <tspan fill="#f5c451">Quest</tspan></text>
+  <text x="474" y="372" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="38" font-weight="500" fill="#9fb0d4">Gamified Security+ SY0-701 study app</text>
+  <g font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="26" font-weight="600">
+    <rect x="474" y="412" width="226" height="50" rx="25" fill="#142650" stroke="#22386b"/><text x="587" y="445" text-anchor="middle" fill="#2dd4bf">955 questions</text>
+    <rect x="716" y="412" width="196" height="50" rx="25" fill="#142650" stroke="#22386b"/><text x="814" y="445" text-anchor="middle" fill="#2dd4bf">Voice study</text>
+    <rect x="928" y="412" width="236" height="50" rx="25" fill="#142650" stroke="#22386b"/><text x="1046" y="445" text-anchor="middle" fill="#f5c451">Practice exams</text>
+  </g>
+</svg>
