@@ -4,7 +4,7 @@
   "use strict";
 
   // ---------- Storage ----------
-  const APP_VERSION = "1.3.0";
+  const APP_VERSION = "1.3.1";
   const STATE_KEY = "spq-state-v1";
   const SETTINGS_KEY = "spq-settings-v1";
   const LETTERS = ["A", "B", "C", "D", "E", "F"];
@@ -19,13 +19,13 @@
 
   const defaultState = () => ({ xp: 0, q: {}, exams: [], streakDays: 0, lastDay: null, today: { date: null, n: 0 }, bestCombo: 0, badges: [] });
   const defaultSettings = {
-    engine: "browser", elKey: "", elVoice: "hpp4J3VqNfWAUOO0d1Us", elModel: "eleven_flash_v2_5",
+    engine: "browser", elKey: "", elVoice: "bIHbv24MWmeRgasZH58o", elModel: "eleven_flash_v2_5",
     rate: 1, browserVoice: "", autoRead: "off", dailyGoal: 30, audioPause: 6, practiceSize: 10, elVoices: [],
   };
   let state = load(STATE_KEY, defaultState());
   let settings = load(SETTINGS_KEY, defaultSettings);
-  // Migrate the old default voice (Rachel) to the new default study voice (Bella).
-  if (settings.elVoice === "21m00Tcm4TlvDq8ikWAM") settings.elVoice = defaultSettings.elVoice;
+  // Migrate earlier default voices (Rachel, Bella) to the current default (Will) unless the user picked a voice.
+  if (settings.elVoice === "21m00Tcm4TlvDq8ikWAM" || (settings.elVoice === "hpp4J3VqNfWAUOO0d1Us" && !settings.pickedVoice)) settings.elVoice = defaultSettings.elVoice;
   if (!settings.migratedEngine) {
     settings.migratedEngine = true;
     if (settings.elKey && /^sk_|^[0-9a-f]{32}$/i.test(String(settings.elKey).trim()) && settings.engine === "browser") settings.engine = "eleven";
@@ -648,7 +648,7 @@
   // ---------- Settings ----------
   VIEWS.settings = function () {
     const voices = browserVoices();
-    const elVoices = Array.isArray(settings.elVoices) && settings.elVoices.length ? settings.elVoices : [{ id: TTS.DEFAULT_VOICE, name: "Bella: Professional, Bright, Warm" }];
+    const elVoices = Array.isArray(settings.elVoices) && settings.elVoices.length ? settings.elVoices : [{ id: TTS.DEFAULT_VOICE, name: "Will: Relaxed Optimist" }];
     if (!elVoices.some((v) => v.id === settings.elVoice)) elVoices.unshift({ id: settings.elVoice, name: "Custom voice (" + settings.elVoice + ")" });
     $app.innerHTML = topbar() + `<button class="btn sm ghost" data-go="home">← Back</button>
       <h1 style="margin-top:12px">⚙️ Settings</h1>
@@ -673,7 +673,7 @@
           <select id="elModel" style="width:auto"><option value="eleven_flash_v2_5">Flash v2.5 (fast, cheaper)</option><option value="eleven_multilingual_v2">Multilingual v2 (richest quality)</option><option value="eleven_turbo_v2_5">Turbo v2.5</option></select></div>
         <details style="margin-top:10px"><summary class="small muted">Advanced: use a voice ID</summary>
           <label class="field" style="margin-top:8px">Voice ID (from ElevenLabs → Voices → ⋯ → Copy voice ID)
-            <div class="row" style="flex-wrap:nowrap"><input type="text" id="voiceId" placeholder="e.g. hpp4J3VqNfWAUOO0d1Us" spellcheck="false"><button class="btn sm" id="useVoiceId" type="button">Use</button></div></label></details>
+            <div class="row" style="flex-wrap:nowrap"><input type="text" id="voiceId" placeholder="e.g. bIHbv24MWmeRgasZH58o" spellcheck="false"><button class="btn sm" id="useVoiceId" type="button">Use</button></div></label></details>
         <div class="row" style="margin-top:12px"><button class="btn primary" id="test">▶ Test voice</button><button class="btn sm ghost" id="clr">Clear audio cache</button></div>
       </div>
       <div class="card" style="margin-top:14px"><h2>🎯 Study</h2>
@@ -743,11 +743,11 @@
       }, 350);
     };
     $("showKey").onclick = () => { const i = $("elKey"); const show = i.type === "password"; i.type = show ? "text" : "password"; $("showKey").textContent = show ? "Hide" : "Show"; };
-    $("elVoice").onchange = (e) => { settings.elVoice = e.target.value; saveS(); renderStatus(); };
+    $("elVoice").onchange = (e) => { settings.elVoice = e.target.value; settings.pickedVoice = true; saveS(); renderStatus(); };
     $("useVoiceId").onclick = () => {
       const id = $("voiceId").value.trim();
       if (!/^[A-Za-z0-9]{10,40}$/.test(id)) { toast("That doesn't look like an ElevenLabs voice ID."); return; }
-      settings.elVoice = id; saveS();
+      settings.elVoice = id; settings.pickedVoice = true; saveS();
       if (![...$("elVoice").options].some((o) => o.value === id)) $("elVoice").insertAdjacentHTML("afterbegin", `<option value="${esc(id)}">Custom voice (${esc(id)})</option>`);
       $("elVoice").value = id; renderStatus(); toast("Voice set ✅ Tap ▶ Test voice");
     };

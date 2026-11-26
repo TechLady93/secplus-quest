@@ -12,7 +12,7 @@
 
 window.TTS = (function () {
   const CACHE_NAME = "secplus-quest-tts-v1";
-  const DEFAULT_VOICE = "hpp4J3VqNfWAUOO0d1Us"; // Bella: Professional, Bright, Warm (built-in on every account)
+  const DEFAULT_VOICE = "bIHbv24MWmeRgasZH58o"; // Will: Relaxed Optimist (built-in on every account)
   const memCache = new Map();
   let speakToken = 0;
   let lastStatus = { engine: null, ok: null, message: "" };
