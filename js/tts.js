@@ -194,6 +194,13 @@ window.TTS = (function () {
     }
   }
 
+  // Fetch and cache a line ahead of time so the next segment starts without a gap (ElevenLabs only).
+  function prefetch(text) {
+    const s = settings();
+    if (s.engine !== "eleven" || keyProblem(s.elKey)) return;
+    elevenAudioUrl(text).catch(() => {});
+  }
+
   function isSpeaking() {
     return !audioEl.paused || (window.speechSynthesis && window.speechSynthesis.speaking);
   }
@@ -215,7 +222,7 @@ window.TTS = (function () {
   }
 
   return {
-    say, stop, isSpeaking, clearCache, listElevenVoices, testEleven, keyProblem, DEFAULT_VOICE,
+    say, stop, prefetch, isSpeaking, clearCache, listElevenVoices, testEleven, keyProblem, DEFAULT_VOICE,
     get lastStatus() { return lastStatus; },
   };
 })();

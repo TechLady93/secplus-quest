@@ -20,6 +20,7 @@
 | 🐉 **Boss Battle: Practice Exam** | Opens with PBQs like the real test (3 in the full exam, 1 in the quick one, each worth 3 questions), then 90 questions in 90 minutes, weighted like the real exam (12/22/18/28/20%). Flag questions and jump around, then get an estimated score on the 100–900 scale with a breakdown by domain. A quick 30-question version is also included. |
 | 📚 **Practice by Domain / Objective** | Drill any domain or a single objective (1.1 through 5.6). You get instant feedback and a full explanation after every answer. |
 | 🎯 **Weak Spots** | Spaced repetition (Leitner boxes). Questions you miss keep coming back until you master them, then return after 1, 2, 4, 7, and 15 days so they stick. |
+| 🚗 **Drive Mode: Audio Lessons** | About 2 hours of spoken lessons, like a podcast for Security+. There's a lecture for every objective (1.1 through 5.6, plus an Exam Day Strategy track), with key terms, exam tips, and memory tricks, followed by optional *Key points* reviews for all 120 sections. Plays nonstop in course order, remembers where you stopped, has big buttons and speed control, and works with car and lock-screen controls. |
 | 🎧 **Audio Study (hands-free)** | Reads the question and choices, gives you thinking time, then reads the answer and the explanation. Good for driving, the gym, or chores. |
 | ⚡ **Lightning Round** | 15 questions with 20 seconds each. Combos earn bonus XP. |
 | 🃏 **Flashcards** | Flip to reveal the answer, then rate yourself. |
@@ -63,6 +64,7 @@ data/net.js         Network Foundations warm-up bank
 data/cs.js          Exam-style scenario questions (BEST / FIRST / MOST)
 data/pbq.js         Performance-based questions
 data/acr.js         Security+ acronym list (acronym, spelled out)
+data/notes1-4.js    Drive Mode audio lessons, one LESSON() per objective
 js/pbq.js           PBQ engine: rendering, partial-credit grading
 tools/validate.js   Question-bank checker (run: node tools/validate.js)
 tools/pbqcheck.js   PBQ checker (answers exist in options, perfect answers score 100%)
@@ -86,7 +88,7 @@ The third value is the index of the correct choice. Choices are shuffled every t
 3. Do a round in 🔤 **Acronym Academy** daily. Acronyms show up all over the exam, and knowing them on sight frees up time for the hard questions.
 4. Do the 🧪 PBQ Lab until every PBQ is ✅ mastered (80%+). On exam day, many people flag the PBQs, answer the multiple choice first, then come back.
 5. Take a 🐉 Boss Battle weekly. Book the real exam once you're consistently scoring **850+**. The score here is a straight-line estimate, and CompTIA's real scaling isn't public, so give yourself a cushion.
-6. Use 🎧 Audio Study for review time away from your desk.
+6. Use 🚗 Drive Mode on your commute to hear the lessons, and 🎧 Audio Study to quiz yourself away from your desk.
 7. For extra hands-on practice beyond the PBQ Lab, try free labs (TryHackMe, a home lab, or Wireshark captures).
 
 ---
