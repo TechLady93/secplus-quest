@@ -4,7 +4,7 @@
   "use strict";
 
   // ---------- Storage ----------
-  const APP_VERSION = "1.3.1";
+  const APP_VERSION = "1.3.2";
   const STATE_KEY = "spq-state-v1";
   const SETTINGS_KEY = "spq-settings-v1";
   const LETTERS = ["A", "B", "C", "D", "E", "F"];
