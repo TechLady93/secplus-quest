@@ -4,7 +4,7 @@
   "use strict";
 
   // ---------- Storage ----------
-  const APP_VERSION = "1.4.0";
+  const APP_VERSION = "1.5.0";
   const STATE_KEY = "spq-state-v1";
   const SETTINGS_KEY = "spq-settings-v1";
   const LETTERS = ["A", "B", "C", "D", "E", "F"];
@@ -182,6 +182,7 @@
         <div class="card click mode" data-go="audioSetup" tabindex="0"><div class="ico">🎧</div><div><h3>Audio Study (hands-free)</h3><p class="muted small">Reads each question and choices, pauses so you can think, then reads the answer and why it's right.</p></div></div>
         <div class="card click mode" data-go="lightning" tabindex="0"><div class="ico">⚡</div><div><h3>Lightning Round</h3><p class="muted small">15 questions, 20 seconds each. Build combos for bonus XP.</p></div></div>
         <div class="card click mode" data-go="flashSetup" tabindex="0"><div class="ico">🃏</div><div><h3>Flashcards</h3><p class="muted small">Flip cards to see the answer and explanation. Rate yourself honestly.</p></div></div>
+        <div class="card click mode" data-go="acronyms" tabindex="0"><div class="ico">🔤</div><div><h3>Acronym Academy</h3><p class="muted small">All ${(window.ACRONYMS || []).length} Security+ acronyms: quizzes both ways, a timed blitz, flashcards, audio, and a searchable glossary.</p></div></div>
         <div class="card click mode" data-go="stats" tabindex="0"><div class="ico">📊</div><div><h3>My Stats</h3><p class="muted small">Mastery by objective, exam history, and where to focus next.</p></div></div>
       </div>
 
@@ -296,7 +297,7 @@
           <p><b>Answer: ${LETTERS[it.correct]}. ${esc(it.q.a[it.q.c])}</b></p><p>${esc(it.q.e)}</p></div>` : ""}
       </div>
       <div class="footer-actions">
-        <button class="btn ghost" data-go="home">✖ Quit</button>
+        <button class="btn ghost" data-go="${s.back || "home"}">✖ Quit</button>
         ${answered ? `<button class="btn primary" id="next">${s.i + 1 < n ? "Next →" : "See results 🏁"}</button>` : ""}
       </div>`;
 
@@ -356,11 +357,11 @@
         <div class="row" style="justify-content:center">
           ${missed.length ? `<button class="btn gold" id="retry">Retry the ${missed.length} I missed</button>` : ""}
           ${s.node && nextNode() ? `<button class="btn primary" id="nextNode">${nextNode().key === s.node ? "Try this section again" : "Next: " + esc(nextNode().label)} →</button>` : ""}
-          ${s.node ? `<button class="btn" data-go="course">Course Path</button>` : `<button class="btn primary" data-go="home">Back to missions</button>`}</div>
+          ${s.node ? `<button class="btn" data-go="course">Course Path</button>` : s.back ? `<button class="btn primary" data-go="${s.back}">Back to Acronym Academy</button>` : `<button class="btn primary" data-go="home">Back to missions</button>`}</div>
       </div>
       ${missed.length ? `<h2 style="margin-top:20px">Review your misses</h2>` + missed.map(reviewCard).join("") : ""}`;
     const rt = $app.querySelector("#retry");
-    if (rt) rt.onclick = () => startPractice("Retry: " + s.title, shuffle(missed.map((x) => x.q)), { node: s.node });
+    if (rt) rt.onclick = () => startPractice("Retry: " + s.title, shuffle(missed.map((x) => x.q)), { node: s.node, back: s.back });
     const nn = $app.querySelector("#nextNode"); if (nn) nn.onclick = () => startNode(nextNode());
     bindReviewReads(missed);
   };
@@ -589,7 +590,7 @@
           : `<p class="big" style="color:var(--green);margin-top:14px">${esc(it.q.a[it.q.c])}</p><p class="small muted" style="max-width:640px;margin:0 auto">${esc(it.q.e)}</p>`}
       </div>
       <div class="footer-actions">
-        <button class="btn ghost" data-go="home">✖ Quit</button>
+        <button class="btn ghost" data-go="${s.back || "home"}">✖ Quit</button>
         <button class="btn sm ghost" id="read">🔊 Read</button>
         ${s.flipped ? `<div class="row"><button class="btn" id="no">😕 Didn't know</button><button class="btn primary" id="yes">😎 Knew it</button></div>` : `<button class="btn primary" id="flip">Flip ↻</button>`}
       </div>`;
@@ -600,11 +601,123 @@
     const rate = (ok) => {
       record(it.q.id, ok); addXP(ok ? 5 : 1); if (ok) s.known++;
       s.flipped = false; TTS.stop();
-      if (s.i + 1 < n) { s.i++; VIEWS.flash(); } else { toast(`Deck done! You knew ${s.known} of ${n}.`); go("home"); }
+      if (s.i + 1 < n) { s.i++; VIEWS.flash(); } else { toast(`Deck done! You knew ${s.known} of ${n}.`); go(s.back || "home"); }
     };
     const y = $app.querySelector("#yes"); if (y) y.onclick = () => rate(true);
     const no = $app.querySelector("#no"); if (no) no.onclick = () => rate(false);
     if (!s.flipped && settings.autoRead !== "off") TTS.say([it.q.q]);
+  };
+
+  // ---------- Acronym Academy ----------
+  // Questions are built from data/acr.js on the fly, with fresh wrong answers every round.
+  // IDs stay stable, so spaced repetition and mastery still track each acronym.
+  // These are kept out of QBANK so they don't affect exam readiness or the practice exam.
+  const norm = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, "");
+  const ACR = (window.ACRONYMS || []).map((r) => ({ a: r[0], d: r[1], key: norm(r[0]) + "-" + hashText(r[1]) }));
+  const ACR_GROUPS = [["all", "All acronyms", /./], ["ac", "A – C", /^[0-9a-c]/i], ["dh", "D – H", /^[d-h]/i], ["im", "I – M", /^[i-m]/i], ["np", "N – P", /^[n-p]/i], ["qs", "Q – S", /^[q-s]/i], ["tz", "T – Z", /^[t-z]/i]];
+  const firstUp = (s) => String(s)[0].toUpperCase();
+  function acrNotes(x) {
+    let e = `${x.a} stands for ${x.d}.`;
+    const twins = ACR.filter((y) => y !== x && norm(y.a) === norm(x.a));
+    const same = ACR.filter((y) => y !== x && norm(y.d) === norm(x.d));
+    twins.forEach((y) => (e += ` Don't mix it up: ${y.a} can also mean ${y.d}, so read the context.`));
+    if (same.length) e += ` ${same.map((y) => y.a).join(" and ")} means the same thing.`;
+    return e;
+  }
+  function pickDistractors(cands, prefer, val, n) {
+    const out = [], used = new Set();
+    shuffle(cands.filter(prefer)).concat(shuffle(cands)).forEach((y) => {
+      const k = norm(val(y));
+      if (out.length < n && !used.has(k)) { used.add(k); out.push(val(y)); }
+    });
+    return out;
+  }
+  // Forward: "What does PKI stand for?"
+  function acrFwd(x) {
+    const bad = new Set(ACR.filter((y) => norm(y.a) === norm(x.a) || norm(y.d) === norm(x.d)).map((y) => norm(y.d)));
+    const cands = ACR.filter((y) => !bad.has(norm(y.d)));
+    const words = new Set(x.d.toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 3));
+    const near = (y) => firstUp(y.d) === firstUp(x.d) || y.d.toLowerCase().split(/[^a-z]+/).some((w) => words.has(w));
+    return { id: "ACR-f-" + x.key, d: -1, o: "ACR", t: "Acronyms", acr: x,
+      q: `What does ${x.a} stand for?`, a: [x.d].concat(pickDistractors(cands, near, (y) => y.d, 3)), c: 0, e: acrNotes(x) };
+  }
+  // Reverse: "Which acronym stands for Public Key Infrastructure?"
+  function acrRev(x) {
+    const cands = ACR.filter((y) => norm(y.a) !== norm(x.a) && norm(y.d) !== norm(x.d));
+    const near = (y) => firstUp(y.a) === firstUp(x.a) && Math.abs(y.a.length - x.a.length) <= 1;
+    return { id: "ACR-r-" + x.key, d: -1, o: "ACR", t: "Acronyms", acr: x,
+      q: `Which acronym stands for "${x.d}"?`, a: [x.a].concat(pickDistractors(cands, near, (y) => y.a, 3)), c: 0, e: acrNotes(x) };
+  }
+  const acrIds = (x) => ["ACR-f-" + x.key, "ACR-r-" + x.key];
+  function acrMastery(list) {
+    if (!list.length) return 0;
+    let s = 0; list.forEach((x) => acrIds(x).forEach((id) => (s += Math.min(rec(id).box, 3) / 6)));
+    return s / list.length;
+  }
+  function acrWeak() {
+    const now = Date.now();
+    return ACR.filter((x) => acrIds(x).some((id) => { const r = rec(id); return r.seen > 0 && (r.box === 0 || now - r.last >= BOX_DAYS[r.box] * DAY); }));
+  }
+  // Pick acronyms you haven't seen or keep missing first.
+  function acrPick(list, n, idOf) {
+    return shuffle(list).map((x) => { const r = rec(idOf(x)); return { x, s: r.seen === 0 ? 0 : r.box + 1 + Math.random() }; })
+      .sort((a, b) => a.s - b.s).slice(0, n).map((o) => o.x);
+  }
+  function acrScope() {
+    const v = ($app.querySelector("#acrScope") || {}).value || state.acrScope || "all";
+    state.acrScope = v; persist();
+    if (v === "weak") return acrWeak();
+    const g = ACR_GROUPS.find((x) => x[0] === v) || ACR_GROUPS[0];
+    return ACR.filter((x) => g[2].test(x.a));
+  }
+  const acrLabel = () => { const v = state.acrScope || "all"; return v === "weak" ? "missed acronyms" : (ACR_GROUPS.find((x) => x[0] === v) || ACR_GROUPS[0])[1]; };
+  const ACR_MODES = {
+    fwd: () => { const l = acrScope(); return ["🔤 What does it stand for? · " + acrLabel(), acrPick(l, settings.practiceSize, (x) => "ACR-f-" + x.key).map(acrFwd)]; },
+    rev: () => { const l = acrScope(); return ["🔁 Name that acronym · " + acrLabel(), acrPick(l, settings.practiceSize, (x) => "ACR-r-" + x.key).map(acrRev)]; },
+    blitz: () => { const l = acrScope(); return ["⚡ Acronym Blitz · " + acrLabel(), acrPick(l, 15, (x) => "ACR-f-" + x.key).map((x) => (Math.random() < 0.5 ? acrFwd(x) : acrRev(x)))]; },
+  };
+  VIEWS.acronyms = function () {
+    const m = acrMastery(ACR), weakN = acrWeak().length, cur = state.acrScope || "all";
+    const scopeOpts = ACR_GROUPS.map((g) => [g[0], g[1], ACR.filter((x) => g[2].test(x.a)).length]).concat(weakN ? [["weak", "🎯 My missed acronyms", weakN]] : []);
+    $app.innerHTML = topbar() + `<button class="btn sm ghost" data-go="home">← Back</button>
+      <div class="card hero" style="margin-top:12px">
+        <h1 style="margin-top:0">🔤 Acronym Academy</h1>
+        <p class="muted small">All ${ACR.length} acronyms from the official CompTIA Security+ acronym list. The exam expects you to know them on sight, and many questions hide the answer inside one. Each acronym is tracked both ways (acronym → meaning and meaning → acronym), and the ones you miss come back on a spaced-repetition schedule.</p>
+        <div class="row spread small"><span>${pct(m)}% mastered</span>${weakN ? `<span class="chip gold">${weakN} to review</span>` : ""}</div>
+        <div class="bar" style="margin-top:6px"><i style="width:${pct(m)}%"></i></div>
+        <label class="field" style="margin-top:14px">Study set
+          <select id="acrScope">${scopeOpts.map((o) => `<option value="${o[0]}" ${o[0] === cur ? "selected" : ""}>${esc(o[1])} (${o[2]})</option>`).join("")}</select></label>
+      </div>
+      <div class="grid grid-2" style="margin-top:14px">
+        <div class="card click mode" data-acr="fwd" tabindex="0"><div class="ico">🔤</div><div><h3>What does it stand for?</h3><p class="muted small">See the acronym, pick the meaning. ${settings.practiceSize} per round.</p></div></div>
+        <div class="card click mode" data-acr="rev" tabindex="0"><div class="ico">🔁</div><div><h3>Name that acronym</h3><p class="muted small">See the meaning, pick the acronym. Harder, because the wrong answers look alike.</p></div></div>
+        <div class="card click mode" data-acr="blitz" tabindex="0"><div class="ico">⚡</div><div><h3>Acronym Blitz</h3><p class="muted small">15 mixed questions, 15 seconds each. Combos earn bonus XP.</p></div></div>
+        <div class="card click mode" data-acr="flash" tabindex="0"><div class="ico">🃏</div><div><h3>Acronym Flashcards</h3><p class="muted small">Flip through the whole set and rate yourself.</p></div></div>
+        <div class="card click mode" data-acr="audio" tabindex="0" style="grid-column:1/-1"><div class="ico">🎧</div><div><h3>Hands-free acronym drill</h3><p class="muted small">Reads each acronym and its choices, pauses so you can answer out loud, then reads the meaning.</p></div></div>
+      </div>
+      <h2 style="margin-top:22px">📖 Glossary</h2>
+      <input type="text" id="acrFind" placeholder="Search acronyms or meanings… (try “auth”)" aria-label="Search acronyms" style="width:100%;margin-bottom:10px">
+      <div class="card" style="padding:6px 12px"><table id="acrList" style="width:100%"></table></div>`;
+    const list = $app.querySelector("#acrList"), find = $app.querySelector("#acrFind");
+    const dot = (x) => { const b = Math.min(...acrIds(x).map((id) => rec(id).box)), seen = acrIds(x).some((id) => rec(id).seen); return !seen ? "⚪" : b >= 3 ? "🟢" : b >= 1 ? "🟡" : "🔴"; };
+    const draw = () => {
+      const f = find.value.trim().toLowerCase();
+      const rows = ACR.filter((x) => !f || x.a.toLowerCase().includes(f) || x.d.toLowerCase().includes(f));
+      list.innerHTML = rows.length ? rows.map((x) => `<tr><td style="width:1.6em" title="Mastery">${dot(x)}</td><td style="white-space:nowrap"><b>${esc(x.a)}</b></td><td class="small">${esc(x.d)}</td><td style="width:2.6em"><button class="btn sm ghost" data-say="${ACR.indexOf(x)}" aria-label="Read ${esc(x.a)} aloud">🔊</button></td></tr>`).join("")
+        : `<tr><td class="muted small">No matches.</td></tr>`;
+    };
+    draw();
+    find.oninput = draw;
+    list.onclick = (e) => { const b = e.target.closest("[data-say]"); if (b) { const x = ACR[Number(b.dataset.say)]; TTS.say([x.a + ".", x.d + "."]); } };
+    $app.querySelector("#acrScope").onchange = () => { acrScope(); };
+    $app.querySelectorAll("[data-acr]").forEach((el) => (el.onclick = () => {
+      const k = el.dataset.acr, scope = acrScope();
+      if (!scope.length) return toast("Nothing in this set yet.");
+      if (ACR_MODES[k]) { const [title, qs] = ACR_MODES[k](); return startPractice(title, qs, { timed: k === "blitz" ? 15 : 0, back: "acronyms" }); }
+      const qs = shuffle(scope).map(acrFwd);
+      if (k === "flash") { session = { type: "flash", title: "🃏 Acronyms · " + acrLabel(), items: qs.map(inst), i: 0, flipped: false, known: 0, back: "acronyms" }; return go("flash"); }
+      if (k === "audio") audioStart(qs, "Acronyms · " + acrLabel(), "acronyms");
+    }));
   };
 
   // Shared scope picker (domain/objective/weak)
@@ -629,10 +742,10 @@
   }
 
   // ---------- Audio (hands-free) mode ----------
-  const audioStart = function (qs, label) {
+  const audioStart = function (qs, label, back) {
     const pause = Number(($app.querySelector("#pause") || {}).value || settings.audioPause);
     settings.audioPause = pause; save(SETTINGS_KEY, settings);
-    session = { type: "audio", title: label, items: shuffle(qs).map(inst), i: 0, playing: true, phase: "q" };
+    session = { type: "audio", title: label, items: shuffle(qs).map(inst), i: 0, playing: true, phase: "q", back: back };
     go("audio");
   };
   audioStart.extra = `<label class="field">Thinking time before the answer: <b><span id="pv">${settings.audioPause}</span> seconds</b>
@@ -650,7 +763,7 @@
         ${s.phase === "a" ? `<div class="explain"><p><b>Answer: ${LETTERS[it.correct]}</b></p><p>${esc(it.q.e)}</p></div>` : `<p class="muted small" style="margin-top:12px" id="think"></p>`}
       </div>
       <div class="footer-actions">
-        <button class="btn ghost" data-go="home">✖ Stop</button>
+        <button class="btn ghost" data-go="${s.back || "home"}">✖ Stop</button>
         <div class="row"><button class="btn" id="prev" ${s.i === 0 ? "disabled" : ""}>⏮</button>
         <button class="btn primary" id="pp">${s.playing ? "⏸ Pause" : "▶ Play"}</button>
         <button class="btn" id="nxt">⏭</button></div>
@@ -695,7 +808,7 @@
 
   // ---------- Stats ----------
   VIEWS.stats = function () {
-    const seen = Object.keys(state.q).length;
+    const seen = QBANK.filter((q) => state.q[q.id]).length;
     const acc = accuracy(QBANK);
     const objRows = Object.keys(OBJECTIVES).map((o) => ({ o, m: mastery(qsObj(o)), a: accuracy(qsObj(o)), n: qsObj(o).length }));
     const focus = objRows.filter((x) => !x.o.startsWith("N")).sort((a, b) => a.m - b.m).slice(0, 5);
