@@ -23,6 +23,7 @@
 | 🎧 **Audio Study (hands-free)** | Reads the question and choices, gives you thinking time, then reads the answer and the explanation. Good for driving, the gym, or chores. |
 | ⚡ **Lightning Round** | 15 questions with 20 seconds each. Combos earn bonus XP. |
 | 🃏 **Flashcards** | Flip to reveal the answer, then rate yourself. |
+| 🔤 **Acronym Academy** | All 350 acronyms from the official CompTIA Security+ acronym list. Quiz yourself both ways (*What does PKI stand for?* and *Which acronym means Public Key Infrastructure?*), with wrong answers chosen to look alike. Also includes a timed Acronym Blitz, flashcards, a hands-free audio drill, study sets by letter, spaced repetition for the ones you miss, and a searchable glossary with read-aloud. |
 | 📊 **Stats** | Mastery by objective, exam history, and a "focus next" list. |
 
 **Game layer:** XP, ranks (Recruit → Help Desk Hero → SOC Analyst → … → 👑 CISO), daily streaks, daily goals, and an exam-readiness meter.
@@ -61,6 +62,7 @@ data/m1.js … m5.js  Course-section banks (QS(), in course order)
 data/net.js         Network Foundations warm-up bank
 data/cs.js          Exam-style scenario questions (BEST / FIRST / MOST)
 data/pbq.js         Performance-based questions
+data/acr.js         Security+ acronym list (acronym, spelled out)
 js/pbq.js           PBQ engine: rendering, partial-credit grading
 tools/validate.js   Question-bank checker (run: node tools/validate.js)
 tools/pbqcheck.js   PBQ checker (answers exist in options, perfect answers score 100%)
@@ -81,10 +83,11 @@ The third value is the index of the correct choice. Choices are shuffled every t
 
 1. Follow the 🧭 **Course Path** alongside Professor Messer's free SY0-701 videos: watch a section, then pass it here.
 2. Clear your 🎯 Weak Spots every day.
-3. Do the 🧪 PBQ Lab until every PBQ is ✅ mastered (80%+). On exam day, many people flag the PBQs, answer the multiple choice first, then come back.
-4. Take a 🐉 Boss Battle weekly. Book the real exam once you're consistently scoring **850+**. The score here is a straight-line estimate, and CompTIA's real scaling isn't public, so give yourself a cushion.
-5. Use 🎧 Audio Study for review time away from your desk.
-6. For extra hands-on practice beyond the PBQ Lab, try free labs (TryHackMe, a home lab, or Wireshark captures).
+3. Do a round in 🔤 **Acronym Academy** daily. Acronyms show up all over the exam, and knowing them on sight frees up time for the hard questions.
+4. Do the 🧪 PBQ Lab until every PBQ is ✅ mastered (80%+). On exam day, many people flag the PBQs, answer the multiple choice first, then come back.
+5. Take a 🐉 Boss Battle weekly. Book the real exam once you're consistently scoring **850+**. The score here is a straight-line estimate, and CompTIA's real scaling isn't public, so give yourself a cushion.
+6. Use 🎧 Audio Study for review time away from your desk.
+7. For extra hands-on practice beyond the PBQ Lab, try free labs (TryHackMe, a home lab, or Wireshark captures).
 
 ---
 
