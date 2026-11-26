@@ -2,7 +2,7 @@
 const fs = require("fs"), path = require("path"), vm = require("vm");
 const root = path.join(__dirname, "..");
 const ctx = { window: {} }; ctx.window.window = ctx.window; vm.createContext(ctx.window);
-for (const f of ["js/meta.js", "data/d1.js", "data/d2.js", "data/d3.js", "data/d4.js", "data/d5.js", "data/net.js", "data/m1.js", "data/m2.js", "data/m3.js", "data/m4.js", "data/m5.js"])
+for (const f of ["js/meta.js", "data/d1.js", "data/d2.js", "data/d3.js", "data/d4.js", "data/d5.js", "data/net.js", "data/m1.js", "data/m2.js", "data/m3.js", "data/m4.js", "data/m5.js", "data/cs.js"])
   vm.runInContext(fs.readFileSync(path.join(root, f), "utf8"), ctx.window, { filename: f });
 const { QBANK, OBJECTIVES, DOMAINS } = ctx.window;
 let errors = 0; const ids = new Set(), texts = new Set(); const byObj = {}, byDom = {};

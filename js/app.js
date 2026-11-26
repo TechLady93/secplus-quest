@@ -4,7 +4,7 @@
   "use strict";
 
   // ---------- Storage ----------
-  const APP_VERSION = "1.3.2";
+  const APP_VERSION = "1.4.0";
   const STATE_KEY = "spq-state-v1";
   const SETTINGS_KEY = "spq-settings-v1";
   const LETTERS = ["A", "B", "C", "D", "E", "F"];
@@ -17,12 +17,13 @@
   }
   function save(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
 
-  const defaultState = () => ({ xp: 0, q: {}, exams: [], streakDays: 0, lastDay: null, today: { date: null, n: 0 }, bestCombo: 0, badges: [] });
+  const defaultState = () => ({ xp: 0, q: {}, pbq: {}, exams: [], streakDays: 0, lastDay: null, today: { date: null, n: 0 }, bestCombo: 0, badges: [] });
   const defaultSettings = {
     engine: "browser", elKey: "", elVoice: "bIHbv24MWmeRgasZH58o", elModel: "eleven_flash_v2_5",
     rate: 1, browserVoice: "", autoRead: "off", dailyGoal: 30, audioPause: 6, practiceSize: 10, elVoices: [],
   };
   let state = load(STATE_KEY, defaultState());
+  state.pbq = state.pbq || {};
   let settings = load(SETTINGS_KEY, defaultSettings);
   // Migrate earlier default voices (Rachel, Bella) to the current default (Will) unless the user picked a voice.
   if (settings.elVoice === "21m00Tcm4TlvDq8ikWAM" || (settings.elVoice === "hpp4J3VqNfWAUOO0d1Us" && !settings.pickedVoice)) settings.elVoice = defaultSettings.elVoice;
@@ -174,6 +175,8 @@
       <h2 style="margin-top:22px">Choose your mission</h2>
       <div class="grid grid-2">
         <div class="card click mode" data-go="course" tabindex="0" style="grid-column:1/-1;border-color:#145e57"><div class="ico">🧭</div><div><h3>Course Path ${nextNode() ? `<span class="chip teal">Next: ${esc(nextNode().label)}</span>` : `<span class="chip gold">Complete! 👑</span>`}</h3><p class="muted small">Work through all ${SECTIONS.length} sections in course order, one topic at a time, with a review checkpoint after every objective. ${pct(pathProgress())}% complete.</p></div></div>
+        <div class="card click mode" data-go="pbqLab" tabindex="0"><div class="ico">🧪</div><div><h3>PBQ Lab</h3><p class="muted small">${PBQS.length} hands-on simulations, like the ones that open the real exam: firewall rules, log analysis, network placement, matching, ordering, and more.</p></div></div>
+        <div class="card click mode" data-go="examStyle" tabindex="0"><div class="ico">📝</div><div><h3>Exam-Style Scenarios</h3><p class="muted small">Longer, trickier questions worded the way CompTIA writes them: BEST, FIRST, and MOST likely.</p></div></div>
         <div class="card click mode" data-go="examIntro" tabindex="0"><div class="ico">🐉</div><div><h3>Boss Battle: Practice Exam</h3><p class="muted small">${EXAM.questions} questions, ${EXAM.minutes} minutes, weighted like the real SY0-701. Scored on the 100–900 scale.</p></div></div>
         <div class="card click mode" data-go="weak" tabindex="0"><div class="ico">🎯</div><div><h3>Weak Spots ${weakN ? `<span class="chip gold">${weakN} due</span>` : ""}</h3><p class="muted small">Spaced repetition. Questions you missed come back until you've mastered them.</p></div></div>
         <div class="card click mode" data-go="audioSetup" tabindex="0"><div class="ico">🎧</div><div><h3>Audio Study (hands-free)</h3><p class="muted small">Reads each question and choices, pauses so you can think, then reads the answer and why it's right.</p></div></div>
@@ -362,6 +365,7 @@
     bindReviewReads(missed);
   };
   function reviewCard(it, idx) {
+    if (it.pbq) return `<div class="card" style="margin-top:10px" data-pbqrev="${idx}"></div>`;
     return `<div class="card" style="margin-top:10px">
       <div class="row spread"><span class="tag">${it.q.o} · ${esc(it.q.t)}</span><button class="btn sm ghost" data-read="${idx}">🔊</button></div>
       <p style="margin-top:8px"><b>${esc(it.q.q)}</b></p>
@@ -397,6 +401,7 @@
         <h1>🐉 Boss Battle: Practice Exam</h1>
         <p>${EXAM.questions} questions · ${EXAM.minutes} minutes · domains weighted like ${esc(EXAM.name)}:</p>
         <ul class="small">${DOMAINS.filter((d) => d.weight).map((d) => `<li>${d.icon} ${d.id}.0 ${esc(d.name)}: ${pct(d.weight)}% (~${Math.round(d.weight * EXAM.questions)} questions)</li>`).join("")}</ul>
+        <p class="small">🧪 Like the real test, it <b>opens with performance-based questions</b> (3 in the full exam, 1 in the quick version). Each is worth ${PBQ_WEIGHT} questions, with partial credit.</p>
         <p class="muted small">Like the real exam, you won't see answers until you submit. You can flag questions and jump around. Your estimated score uses the 100–900 scale with ${EXAM.passScaled} to pass. It's a straight-line estimate: CompTIA's real scaling isn't published, so aim for 85%+ here to give yourself a cushion.</p>
         <div class="row"><button class="btn gold" id="go">Start the exam</button>
         <button class="btn" id="short">Quick 30-question version</button></div>
@@ -409,21 +414,26 @@
     const ds = DOMAINS.filter((d) => d.weight);
     ds.forEach((d) => { picks = picks.concat(smartPickExam(qsDomain(d.id), Math.round(d.weight * total))); });
     picks = shuffle(picks).slice(0, total);
-    session = { type: "exam", title: "Practice Exam", items: picks.map(inst), i: 0, ends: Date.now() + minutes * 60000, minutes };
+    // Like the real exam, PBQs come first. Each PBQ is worth PBQ_WEIGHT multiple-choice questions.
+    const nP = total >= 60 ? 3 : 1;
+    const pbqs = shuffle(PBQS).slice(0, nP).map((p) => ({ pbq: p, st: PBQ_UI.newAttempt(p), flagged: false, picked: null }));
+    session = { type: "exam", title: "Practice Exam", items: pbqs.concat(picks.map(inst)), i: 0, ends: Date.now() + minutes * 60000, minutes };
     go("exam");
   }
   function smartPickExam(pool, n) { return shuffle(pool).slice(0, n); }
+  const PBQ_WEIGHT = 3;
+  const isAnswered = (x) => (x.pbq ? PBQ_UI.complete(x.pbq, x.st) : x.picked !== null);
   VIEWS.exam = function () {
     const s = session, it = s.items[s.i], n = s.items.length;
-    const done = s.items.filter((x) => x.picked !== null).length;
+    const done = s.items.filter(isAnswered).length;
     $app.innerHTML = topbar(`<span class="chip timer" id="etmr"></span>`) + `
-      <div class="qhead"><b>🐉 Practice Exam</b><span class="small muted">Answered ${done} / ${n}</span></div>
+      <div class="qhead"><b>🐉 Practice Exam</b><span class="small muted" id="doneCount">Answered ${done} / ${n}</span></div>
       <div class="card">
-        <div class="row spread"><span class="small muted">Question ${s.i + 1} of ${n}</span>
-          <div class="row"><button class="btn sm ghost" id="readQ">🔊 Read</button>
+        <div class="row spread"><span class="small muted">Question ${s.i + 1} of ${n}${it.pbq ? " · Performance-based" : ""}</span>
+          <div class="row">${it.pbq ? "" : `<button class="btn sm ghost" id="readQ">🔊 Read</button>`}
           <button class="btn sm ${it.flagged ? "gold" : "ghost"}" id="flag">${it.flagged ? "🚩 Flagged" : "🏳️ Flag"}</button></div></div>
-        <div class="question">${esc(it.q.q)}</div>
-        <div class="choices">${it.order.map((ci, i) => `<button class="choice ${it.picked === i ? "selected" : ""}" data-i="${i}"><span class="key">${LETTERS[i]}</span><span>${esc(it.q.a[ci])}</span></button>`).join("")}</div>
+        ${it.pbq ? `<div id="pbqBox" style="margin-top:8px"></div>` : `<div class="question">${esc(it.q.q)}</div>
+        <div class="choices">${it.order.map((ci, i) => `<button class="choice ${it.picked === i ? "selected" : ""}" data-i="${i}"><span class="key">${LETTERS[i]}</span><span>${esc(it.q.a[ci])}</span></button>`).join("")}</div>`}
       </div>
       <div class="footer-actions">
         <button class="btn" id="prev" ${s.i === 0 ? "disabled" : ""}>← Prev</button>
@@ -431,15 +441,19 @@
         <button class="btn primary" id="next" ${s.i + 1 >= n ? "disabled" : ""}>Next →</button>
       </div>
       <div class="card" style="margin-top:14px"><div class="small muted" style="margin-bottom:8px">Question navigator (🚩 = flagged)</div>
-        <div class="navgrid">${s.items.map((x, i) => `<button data-j="${i}" class="${x.picked !== null ? "answered" : ""} ${x.flagged ? "flag" : ""} ${i === s.i ? "cur" : ""}">${i + 1}</button>`).join("")}</div></div>`;
+        <div class="navgrid">${s.items.map((x, i) => `<button data-j="${i}" class="${isAnswered(x) ? "answered" : ""} ${x.flagged ? "flag" : ""} ${i === s.i ? "cur" : ""} ${x.pbq ? "pbqnav" : ""}">${x.pbq ? "PBQ" : i + 1}</button>`).join("")}</div></div>`;
+    if (it.pbq) PBQ_UI.render($app.querySelector("#pbqBox"), it.pbq, it.st, { mode: "exam-live", onChange: () => {
+      $app.querySelector("#doneCount").textContent = "Answered " + s.items.filter(isAnswered).length + " / " + n;
+      const nb = $app.querySelector(`[data-j="${s.i}"]`); if (nb) nb.classList.toggle("answered", isAnswered(it));
+    } });
     $app.querySelectorAll(".choice").forEach((b) => (b.onclick = () => { it.picked = Number(b.dataset.i); VIEWS.exam(); }));
     $app.querySelectorAll("[data-j]").forEach((b) => (b.onclick = () => { s.i = Number(b.dataset.j); TTS.stop(); VIEWS.exam(); }));
     $app.querySelector("#prev").onclick = () => { s.i--; TTS.stop(); VIEWS.exam(); };
     $app.querySelector("#next").onclick = () => { s.i++; TTS.stop(); VIEWS.exam(); };
     $app.querySelector("#flag").onclick = () => { it.flagged = !it.flagged; VIEWS.exam(); };
-    $app.querySelector("#readQ").onclick = () => TTS.say(questionSpeech(it, s.i + 1));
+    const rq = $app.querySelector("#readQ"); if (rq) rq.onclick = () => TTS.say(questionSpeech(it, s.i + 1));
     $app.querySelector("#submit").onclick = () => {
-      const left = n - s.items.filter((x) => x.picked !== null).length;
+      const left = n - s.items.filter(isAnswered).length;
       if (!confirmInline(left)) return;
       finishExam();
     };
@@ -467,42 +481,100 @@
   }
   function finishExam() {
     clearInterval(timerId); timerId = null; TTS.stop();
-    const s = session, n = s.items.length;
-    let right = 0; const byD = {};
+    const s = session;
+    let right = 0, n = 0; const byD = {};
     s.items.forEach((it) => {
+      if (it.pbq) {
+        it.st.submitted = true;
+        const g = PBQ_UI.grade(it.pbq, it.st), d = Number(it.pbq.o[0]);
+        it.pbqPct = g.pct; state.pbq[it.pbq.id] = Math.max(state.pbq[it.pbq.id] || 0, g.pct);
+        right += g.pct * PBQ_WEIGHT; n += PBQ_WEIGHT;
+        byD[d] = byD[d] || { r: 0, n: 0 }; byD[d].n += PBQ_WEIGHT; byD[d].r += g.pct * PBQ_WEIGHT;
+        return;
+      }
       const ok = it.picked === it.correct;
       if (it.picked !== null) record(it.q.id, ok);
-      if (ok) right++;
+      if (ok) right++; n++;
       byD[it.q.d] = byD[it.q.d] || { r: 0, n: 0 }; byD[it.q.d].n++; if (ok) byD[it.q.d].r++;
     });
+    right = Math.round(right * 10) / 10;
     const p = right / n, scaled = Math.round(100 + 800 * p);
-    const xp = right * 8 + (scaled >= EXAM.passScaled ? 150 : 25);
+    const xp = Math.round(right * 8) + (scaled >= EXAM.passScaled ? 150 : 25);
     addXP(xp);
     state.exams.push({ date: new Date().toISOString(), n, right, scaled, byD });
     persist();
-    session.result = { right, p, scaled, byD, xp };
+    session.result = { right, n, p, scaled, byD, xp };
     view = "examResults"; VIEWS.examResults();
   }
   VIEWS.examResults = function () {
     const s = session, r = s.result, pass = r.scaled >= EXAM.passScaled;
-    const missed = s.items.filter((it) => it.picked !== it.correct);
+    const missed = s.items.filter((it) => (it.pbq ? it.pbqPct < 1 : it.picked !== it.correct));
+    const pbqItems = s.items.filter((it) => it.pbq);
     $app.innerHTML = topbar() + `
       <div class="card hero" style="text-align:center">
         <div class="muted">Estimated score</div>
         <div class="score-ring ${pass ? "pass" : "fail"}">${r.scaled}</div>
         <h2>${pass ? "🏆 PASS! The dragon is down!" : "Not yet. The dragon survives… for now."}</h2>
-        <p>${r.right} / ${s.items.length} correct (${pct(r.p)}%) · <span class="xp-pop">+${r.xp} XP</span></p>
+        <p>${r.right} / ${r.n || s.items.length} points (${pct(r.p)}%) · <span class="xp-pop">+${r.xp} XP</span></p>
+        ${pbqItems.length ? `<p class="small muted">PBQs (worth ${PBQ_WEIGHT} points each): ${pbqItems.map((x) => pct(x.pbqPct) + "%").join(", ")}</p>` : ""}
         <table style="max-width:520px;margin:10px auto"><tr><th>Domain</th><th>Score</th></tr>
           ${DOMAINS.filter((d) => r.byD[d.id]).map((d) => { const x = r.byD[d.id]; const v = x.r / x.n; return `<tr><td>${d.icon} ${d.id}.0 ${esc(d.name)}</td><td style="color:${v >= 0.8 ? "var(--green)" : v >= 0.65 ? "var(--gold)" : "var(--red)"}"><b>${pct(v)}%</b> (${x.r}/${x.n})</td></tr>`; }).join("")}
         </table>
         <div class="row" style="justify-content:center">
-          ${missed.length ? `<button class="btn gold" id="retry">Drill the ${missed.length} I missed</button>` : ""}
+          ${missed.some((x) => !x.pbq) ? `<button class="btn gold" id="retry">Drill the ${missed.filter((x) => !x.pbq).length} I missed</button>` : ""}
           <button class="btn primary" data-go="home">Back to missions</button></div>
       </div>
       ${missed.length ? `<h2 style="margin-top:20px">Answer review</h2>` + missed.map(reviewCard).join("") : ""}`;
+    missed.forEach((it, idx) => { if (it.pbq) { const box = $app.querySelector(`[data-pbqrev="${idx}"]`); if (box) PBQ_UI.render(box, it.pbq, it.st, { mode: "practice" }); } });
     const rt = $app.querySelector("#retry");
-    if (rt) rt.onclick = () => startPractice("Exam misses", shuffle(missed.map((x) => x.q)));
+    if (rt) rt.onclick = () => startPractice("Exam misses", shuffle(missed.filter((x) => !x.pbq).map((x) => x.q)));
     bindReviewReads(missed);
+  };
+
+  // ---------- PBQ Lab ----------
+  VIEWS.pbqLab = function () {
+    const done = PBQS.filter((p) => (state.pbq[p.id] || 0) >= 0.8).length;
+    let lastD = null;
+    $app.innerHTML = topbar() + `<button class="btn sm ghost" data-go="home">← Back</button>
+      <h1 style="margin-top:12px">🧪 PBQ Lab</h1>
+      <p class="muted">Performance-based questions open the real Security+ exam and carry extra weight. Practice them here with partial credit and an explanation for every part. Tip: on exam day, many people flag the PBQs, do the multiple choice first, then come back.</p>
+      <p class="small">Mastered (80%+): <b>${done} / ${PBQS.length}</b></p>
+      <div class="row" style="margin-bottom:14px"><button class="btn primary" id="rnd">🎲 Random PBQ</button><button class="btn" id="all">Play all ${PBQS.length} in a row</button></div>
+      <div class="grid">${PBQS.map((p, i) => ({ p, i })).sort((a, b) => a.p.o.localeCompare(b.p.o)).map(({ p, i }) => {
+        const d = Number(p.o[0]); let head = "";
+        if (d !== lastD) { lastD = d; const D = DOMAINS.find((x) => x.id === d); head = `<h2 style="margin:12px 0 4px">${D.icon} ${d}.0 ${esc(D.name)}</h2>`; }
+        const best = state.pbq[p.id];
+        return head + `<div class="card click" data-pbq="${i}" tabindex="0" style="padding:12px 14px"><div class="row spread"><div><span class="tag">${esc(p.kind)}</span> <b>${esc(p.title)}</b></div>
+          <span class="small muted">${best === undefined ? "new" : (best >= 0.8 ? "✅ " : "") + pct(best) + "%"}</span></div></div>`;
+      }).join("")}</div>`;
+    $app.querySelector("#rnd").onclick = () => startPbqs(shuffle(PBQS).slice(0, 1));
+    $app.querySelector("#all").onclick = () => startPbqs(shuffle(PBQS));
+    $app.querySelectorAll("[data-pbq]").forEach((el) => (el.onclick = () => startPbqs([PBQS[Number(el.dataset.pbq)]])));
+  };
+  function startPbqs(list) { session = { type: "pbq", list, i: 0, st: PBQ_UI.newAttempt(list[0]) }; go("pbqPlay"); }
+  VIEWS.pbqPlay = function () {
+    const s = session, p = s.list[s.i];
+    $app.innerHTML = topbar() + `<div class="qhead"><b>🧪 PBQ Lab</b><span class="small muted">${s.i + 1} / ${s.list.length}</span></div>
+      <div class="card" id="pbqBox"></div>
+      <div class="footer-actions"><button class="btn ghost" data-go="pbqLab">✖ Exit</button>
+        <div class="row">${s.st.submitted ? `<button class="btn" id="again">↻ Try again</button>${s.i + 1 < s.list.length ? `<button class="btn primary" id="nextP">Next PBQ →</button>` : `<button class="btn primary" data-go="pbqLab">Done</button>`}` : `<button class="btn primary" id="sub">Submit</button>`}</div></div>`;
+    PBQ_UI.render($app.querySelector("#pbqBox"), p, s.st, { mode: "practice", readBtn: true });
+    const sub = $app.querySelector("#sub");
+    if (sub) sub.onclick = () => {
+      if (!PBQ_UI.complete(p, s.st) && !sub.dataset.armed) { sub.dataset.armed = "1"; sub.textContent = "Some parts are blank. Submit anyway?"; return; }
+      s.st.submitted = true;
+      const g = PBQ_UI.grade(p, s.st);
+      state.pbq[p.id] = Math.max(state.pbq[p.id] || 0, g.pct);
+      const xp = Math.round(g.pct * 40) + (g.pct === 1 ? 20 : 0); persist(); addXP(xp);
+      toast((g.pct === 1 ? "🏆 Perfect PBQ! " : g.pct >= 0.8 ? "💪 Nice work! " : "📚 Keep going! ") + "+" + xp + " XP");
+      VIEWS.pbqPlay(); window.scrollTo(0, document.body.scrollHeight);
+    };
+    const ag = $app.querySelector("#again"); if (ag) ag.onclick = () => { s.st = PBQ_UI.newAttempt(p); VIEWS.pbqPlay(); window.scrollTo(0, 0); };
+    const nx = $app.querySelector("#nextP"); if (nx) nx.onclick = () => { s.i++; s.st = PBQ_UI.newAttempt(s.list[s.i]); VIEWS.pbqPlay(); window.scrollTo(0, 0); };
+  };
+  VIEWS.examStyle = function () {
+    const pool = QBANK.filter((q) => q.t === "Exam-style scenario");
+    startPractice("📝 Exam-Style Scenarios", smartPick(pool, Math.min(10, pool.length)));
   };
 
   // ---------- Flashcards ----------
@@ -800,7 +872,7 @@
       else if (k === "r") TTS.say(it.picked === null ? questionSpeech(it) : answerSpeech(it));
     } else if (view === "exam") {
       const it = session.items[session.i];
-      if (/^[1-6]$/.test(k) && Number(k) <= it.order.length) { it.picked = Number(k) - 1; VIEWS.exam(); }
+      if (!it.pbq && /^[1-6]$/.test(k) && Number(k) <= it.order.length) { it.picked = Number(k) - 1; VIEWS.exam(); }
       else if (k === "arrowright" && session.i + 1 < session.items.length) { session.i++; VIEWS.exam(); }
       else if (k === "arrowleft" && session.i > 0) { session.i--; VIEWS.exam(); }
       else if (k === "f") { it.flagged = !it.flagged; VIEWS.exam(); }
