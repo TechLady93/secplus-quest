@@ -93,5 +93,15 @@ window.QBANK = [];
       });
     });
   };
+  // QS = course-aligned section bank: same as QB, but also records the section in course order.
+  window.SECTIONS = [];
+  window.QS = function (objective, topic, rows) {
+    const key = objective + " - " + topic;
+    if (!window.SECTIONS.some(function (s) { return s.key === key; }))
+      window.SECTIONS.push({ key: key, o: objective, t: topic });
+    const start = window.QBANK.length;
+    window.QB(objective, topic, rows);
+    for (let i = start; i < window.QBANK.length; i++) window.QBANK[i].sec = key;
+  };
   window.hashText = hash;
 })();

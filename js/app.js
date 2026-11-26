@@ -165,6 +165,7 @@
 
       <h2 style="margin-top:22px">Choose your mission</h2>
       <div class="grid grid-2">
+        <div class="card click mode" data-go="course" tabindex="0" style="grid-column:1/-1;border-color:#145e57"><div class="ico">🧭</div><div><h3>Course Path ${nextNode() ? `<span class="chip teal">Next: ${esc(nextNode().label)}</span>` : `<span class="chip gold">Complete! 👑</span>`}</h3><p class="muted small">Work through all ${SECTIONS.length} sections in course order, one topic at a time, with a review checkpoint after every objective. ${pct(pathProgress())}% complete.</p></div></div>
         <div class="card click mode" data-go="examIntro" tabindex="0"><div class="ico">🐉</div><div><h3>Boss Battle: Practice Exam</h3><p class="muted small">${EXAM.questions} questions, ${EXAM.minutes} minutes, weighted like the real SY0-701. Scored on the 100–900 scale.</p></div></div>
         <div class="card click mode" data-go="weak" tabindex="0"><div class="ico">🎯</div><div><h3>Weak Spots ${weakN ? `<span class="chip gold">${weakN} due</span>` : ""}</h3><p class="muted small">Spaced repetition. Questions you missed come back until you've mastered them.</p></div></div>
         <div class="card click mode" data-go="audioSetup" tabindex="0"><div class="ico">🎧</div><div><h3>Audio Study (hands-free)</h3><p class="muted small">Reads each question and choices, pauses so you can think, then reads the answer and why it's right.</p></div></div>
@@ -183,6 +184,50 @@
           <div class="bar"><i style="width:${pct(m)}%"></i></div></div>`;
       }).join("")}</div>
       <p class="small muted" style="margin-top:22px">Tip: press <span class="kbd">1</span>–<span class="kbd">4</span> to answer, <span class="kbd">Enter</span> for next, and <span class="kbd">R</span> to read aloud.</p>`;
+  };
+
+  // ---------- Course Path (follows the course section order) ----------
+  // Path = each objective's course sections in order, then an objective review checkpoint
+  // that drills the core bank questions for that objective.
+  const PATH = (function () {
+    const nodes = [], seen = new Set();
+    SECTIONS.forEach((s, i) => {
+      nodes.push({ key: s.key, o: s.o, label: s.o + " " + s.t, qs: QBANK.filter((q) => q.sec === s.key) });
+      const next = SECTIONS[i + 1];
+      if ((!next || next.o !== s.o) && !seen.has(s.o)) {
+        seen.add(s.o);
+        const core = QBANK.filter((q) => q.o === s.o && !q.sec);
+        if (core.length) nodes.push({ key: "review-" + s.o, o: s.o, label: s.o + " Checkpoint", review: true, qs: core });
+      }
+    });
+    return nodes;
+  })();
+  const nodeDone = (n) => mastery(n.qs) >= 0.67 || (accuracy(n.qs) !== null && accuracy(n.qs) >= 0.8 && n.qs.every((q) => rec(q.id).seen > 0));
+  function nextNode() { return PATH.find((n) => !nodeDone(n)); }
+  function pathProgress() { return PATH.filter(nodeDone).length / PATH.length; }
+  function startNode(n) {
+    const qs = n.review ? smartPick(n.qs, Math.min(15, n.qs.length)) : shuffle(n.qs);
+    startPractice((n.review ? "🏁 " : "🧭 ") + n.label, qs, { node: n.key });
+  }
+
+  VIEWS.course = function () {
+    const nx = nextNode();
+    let lastD = null;
+    $app.innerHTML = topbar() + `<button class="btn sm ghost" data-go="home">← Back</button>
+      <h1 style="margin-top:12px">🧭 Course Path</h1>
+      <p class="muted">Study one section at a time, in the same order as the course notes. A section counts as done once you've answered all of it with 80%+ accuracy. Every objective ends with a 🏁 checkpoint that mixes in the core question bank.</p>
+      <div class="bar gold" style="margin:6px 0 14px"><i style="width:${pct(pathProgress())}%"></i></div>
+      ${nx ? `<button class="btn primary" id="cont" style="margin-bottom:16px">▶ Continue: ${esc(nx.label)}</button>` : `<div class="card" style="margin-bottom:16px">👑 You've completed the whole path. Take a 🐉 Boss Battle!</div>`}
+      <div class="grid">${PATH.map((n, i) => {
+        const d = Number(n.o[0]); let head = "";
+        if (d !== lastD) { lastD = d; const D = DOMAINS.find((x) => x.id === d); head = `<h2 style="margin:14px 0 4px">${D.icon} ${d}.0 ${esc(D.name)}</h2>`; }
+        const done = nodeDone(n), m = mastery(n.qs), isNext = nx && nx.key === n.key;
+        return head + `<div class="card click" data-node="${i}" tabindex="0" style="padding:12px 14px;${isNext ? "border-color:var(--teal)" : ""}${n.review ? ";background:#13224a" : ""}">
+          <div class="row spread"><div>${done ? "✅" : isNext ? "▶️" : n.review ? "🏁" : "⬜"} <b>${esc(n.label)}</b></div>
+          <span class="small muted">${n.qs.length} Q · ${pct(m)}%</span></div></div>`;
+      }).join("")}</div>`;
+    const c = $app.querySelector("#cont"); if (c) c.onclick = () => startNode(nx);
+    $app.querySelectorAll("[data-node]").forEach((el) => (el.onclick = () => startNode(PATH[Number(el.dataset.node)])));
   };
 
   // ---------- Domain ----------
@@ -299,11 +344,13 @@
         <p class="muted">${score >= 0.9 ? "Outstanding. This topic is locking in! 🔒" : score >= 0.8 ? "Exam-ready pace. Keep it up! 💪" : score >= 0.6 ? "Getting there. Review the misses below. 📚" : "Tough set. Read the explanations, then try again. You've got this. 🙏🏾"}</p>
         <div class="row" style="justify-content:center">
           ${missed.length ? `<button class="btn gold" id="retry">Retry the ${missed.length} I missed</button>` : ""}
-          <button class="btn primary" data-go="home">Back to missions</button></div>
+          ${s.node && nextNode() ? `<button class="btn primary" id="nextNode">${nextNode().key === s.node ? "Try this section again" : "Next: " + esc(nextNode().label)} →</button>` : ""}
+          ${s.node ? `<button class="btn" data-go="course">Course Path</button>` : `<button class="btn primary" data-go="home">Back to missions</button>`}</div>
       </div>
       ${missed.length ? `<h2 style="margin-top:20px">Review your misses</h2>` + missed.map(reviewCard).join("") : ""}`;
     const rt = $app.querySelector("#retry");
-    if (rt) rt.onclick = () => startPractice("Retry: " + s.title, shuffle(missed.map((x) => x.q)));
+    if (rt) rt.onclick = () => startPractice("Retry: " + s.title, shuffle(missed.map((x) => x.q)), { node: s.node });
+    const nn = $app.querySelector("#nextNode"); if (nn) nn.onclick = () => startNode(nextNode());
     bindReviewReads(missed);
   };
   function reviewCard(it, idx) {
