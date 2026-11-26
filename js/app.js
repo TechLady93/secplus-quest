@@ -18,11 +18,13 @@
 
   const defaultState = () => ({ xp: 0, q: {}, exams: [], streakDays: 0, lastDay: null, today: { date: null, n: 0 }, bestCombo: 0, badges: [] });
   const defaultSettings = {
-    engine: "browser", elKey: "", elVoice: "21m00Tcm4TlvDq8ikWAM", elModel: "eleven_flash_v2_5",
+    engine: "browser", elKey: "", elVoice: "hpp4J3VqNfWAUOO0d1Us", elModel: "eleven_flash_v2_5",
     rate: 1, browserVoice: "", autoRead: "off", dailyGoal: 30, audioPause: 6, practiceSize: 10,
   };
   let state = load(STATE_KEY, defaultState());
   let settings = load(SETTINGS_KEY, defaultSettings);
+  // Migrate the old default voice (Rachel) to the new default study voice (Bella).
+  if (settings.elVoice === "21m00Tcm4TlvDq8ikWAM") settings.elVoice = defaultSettings.elVoice;
   const persist = () => save(STATE_KEY, state);
 
   // ---------- Helpers ----------
@@ -655,7 +657,7 @@
         <p class="small muted">Paste your API key from elevenlabs.io (Profile → API Keys). It's saved <b>only in this browser</b> and sent only to ElevenLabs. It never goes into the app code or GitHub. Audio is cached after the first play, so replaying the same question doesn't use more credits.</p>
         <label class="field">API key <input type="password" id="elKey" value="${esc(settings.elKey)}" placeholder="sk_..." autocomplete="off"></label>
         <label class="field">Voice
-          <select id="elVoice"><option value="${esc(settings.elVoice)}">${esc(settings.elVoice === "21m00Tcm4TlvDq8ikWAM" ? "Rachel (default)" : settings.elVoice)}</option></select></label>
+          <select id="elVoice"><option value="${esc(settings.elVoice)}">${esc(settings.elVoice === "hpp4J3VqNfWAUOO0d1Us" ? "Bella: Professional, Bright, Warm (default)" : settings.elVoice)}</option></select></label>
         <div class="row"><button class="btn sm" id="loadVoices">Load my ElevenLabs voices</button>
           <select id="elModel" style="width:auto"><option value="eleven_flash_v2_5">Flash v2.5 (fast, cheaper)</option><option value="eleven_multilingual_v2">Multilingual v2 (richest quality)</option><option value="eleven_turbo_v2_5">Turbo v2.5</option></select></div>
         <div class="row" style="margin-top:12px"><button class="btn primary" id="test">▶ Test voice</button><button class="btn sm ghost" id="clr">Clear audio cache</button></div>

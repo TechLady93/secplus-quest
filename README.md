@@ -28,7 +28,7 @@
 ## 🔊 Voice: built-in or ElevenLabs
 
 - **Default:** your device's built-in voice. It's free and needs no setup.
-- **ElevenLabs:** open ⚙️ Settings → Voice engine → *ElevenLabs*, paste your API key (elevenlabs.io → Profile → API Keys), tap **Load my ElevenLabs voices**, and pick a voice.
+- **ElevenLabs:** open ⚙️ Settings → Voice engine → *ElevenLabs*, paste your API key (elevenlabs.io → Profile → API Keys), and you're done. The default voice is **Bella (Professional, Bright, Warm)**, one of ElevenLabs' built-in educational voices. To try others, tap **Load my ElevenLabs voices**.
   - Your key is stored **only in your browser's localStorage** and is sent only to `api.elevenlabs.io`. It's never in this repo.
   - Generated audio is cached in your browser, so replaying a question doesn't use more credits.
 

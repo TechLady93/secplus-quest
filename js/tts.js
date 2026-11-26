@@ -52,7 +52,7 @@ window.TTS = (function () {
 
   async function elevenAudioUrl(text) {
     const s = settings();
-    const voice = s.elVoice || "21m00Tcm4TlvDq8ikWAM";
+    const voice = s.elVoice || "hpp4J3VqNfWAUOO0d1Us"; // Bella: Professional, Bright, Warm
     const model = s.elModel || "eleven_flash_v2_5";
     const key = window.hashText(voice + "|" + model + "|" + text);
     if (memCache.has(key)) return memCache.get(key);
