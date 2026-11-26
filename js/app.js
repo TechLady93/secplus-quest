@@ -4,7 +4,7 @@
   "use strict";
 
   // ---------- Storage ----------
-  const APP_VERSION = "1.5.0";
+  const APP_VERSION = "1.6.0";
   const STATE_KEY = "spq-state-v1";
   const SETTINGS_KEY = "spq-settings-v1";
   const LETTERS = ["A", "B", "C", "D", "E", "F"];
@@ -179,6 +179,7 @@
         <div class="card click mode" data-go="examStyle" tabindex="0"><div class="ico">📝</div><div><h3>Exam-Style Scenarios</h3><p class="muted small">Longer, trickier questions worded the way CompTIA writes them: BEST, FIRST, and MOST likely.</p></div></div>
         <div class="card click mode" data-go="examIntro" tabindex="0"><div class="ico">🐉</div><div><h3>Boss Battle: Practice Exam</h3><p class="muted small">${EXAM.questions} questions, ${EXAM.minutes} minutes, weighted like the real SY0-701. Scored on the 100–900 scale.</p></div></div>
         <div class="card click mode" data-go="weak" tabindex="0"><div class="ico">🎯</div><div><h3>Weak Spots ${weakN ? `<span class="chip gold">${weakN} due</span>` : ""}</h3><p class="muted small">Spaced repetition. Questions you missed come back until you've mastered them.</p></div></div>
+        <div class="card click mode" data-go="driveSetup" tabindex="0" style="grid-column:1/-1;border-color:#6b5520"><div class="ico">🚗</div><div><h3>Drive Mode: Audio Lessons <span class="chip gold">New</span></h3><p class="muted small">Spoken lectures for every objective, plus key points from all ${SECTIONS.length} sections. Plays nonstop, hands-free, with car and lock-screen controls. Like a podcast for Security+.</p></div></div>
         <div class="card click mode" data-go="audioSetup" tabindex="0"><div class="ico">🎧</div><div><h3>Audio Study (hands-free)</h3><p class="muted small">Reads each question and choices, pauses so you can think, then reads the answer and why it's right.</p></div></div>
         <div class="card click mode" data-go="lightning" tabindex="0"><div class="ico">⚡</div><div><h3>Lightning Round</h3><p class="muted small">15 questions, 20 seconds each. Build combos for bonus XP.</p></div></div>
         <div class="card click mode" data-go="flashSetup" tabindex="0"><div class="ico">🃏</div><div><h3>Flashcards</h3><p class="muted small">Flip cards to see the answer and explanation. Rate yourself honestly.</p></div></div>
@@ -804,6 +805,165 @@
     if (!alive()) return;
     if (s.i + 1 < s.items.length) { s.i++; s.phase = "q"; VIEWS.audio(); }
     else { TTS.say(["That's the end of this set. Great studying!"]); s.playing = false; VIEWS.audio(); }
+  }
+
+  // ---------- 🚗 Drive Mode: audio lessons + section key points (hands-free, eyes-free) ----------
+  // Tracks are either hand-written objective lessons (data/notes*.js) or "Key points" reviews
+  // built from each course section's explanations. Plays continuously, remembers where you
+  // stopped, and hooks into lock-screen / car controls through the Media Session API.
+  const DRIVE_KEY = "spq-drive-v1";
+  const objLabel = (o) => (/^\d/.test(o) ? o : "Bonus");
+  const LESSON_TRACKS = (window.LESSONS || []).map((l) => ({
+    id: "L-" + l.o, o: l.o, kind: "lesson", title: (/^\d/.test(l.o) ? l.o + " " : "") + l.t,
+    parts: [(/^\d/.test(l.o) ? "Lesson " + l.o + ". " : "") + l.t + "."].concat(l.parts),
+  }));
+  const KEY_TRACKS = SECTIONS.map((s) => {
+    const qs = QBANK.filter((q) => q.sec === s.key);
+    return { id: "K-" + s.key, o: s.o, kind: "keys", title: s.o + " " + s.t + " · Key points",
+      parts: ["Key points. Section " + s.o + ", " + s.t + "."].concat(qs.map((q) => q.e)) };
+  });
+  const objOrder = (o) => (/^\d/.test(o) ? Number(o) : 99);
+  // Full course order: each objective's lesson, then that objective's section key points.
+  function driveQueue(scope, withKeys) {
+    const objs = Array.from(new Set(LESSON_TRACKS.map((t) => t.o).concat(KEY_TRACKS.map((t) => t.o)))).sort((a, b) => objOrder(a) - objOrder(b));
+    const out = [];
+    objs.forEach((o) => {
+      if (scope !== "all" && (scope.length === 1 ? o[0] !== scope : o !== scope)) return;
+      LESSON_TRACKS.filter((t) => t.o === o).forEach((t) => out.push(t));
+      if (withKeys) KEY_TRACKS.filter((t) => t.o === o).forEach((t) => out.push(t));
+    });
+    return out;
+  }
+  const driveSaved = () => load(DRIVE_KEY, { scope: "all", keys: true, ti: 0, pi: 0, wake: true });
+  let wakeLock = null;
+  async function wake(on) {
+    try {
+      if (on && !wakeLock && navigator.wakeLock) { wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", () => (wakeLock = null)); }
+      if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+    } catch (e) {}
+  }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && view === "drive" && session && session.playing && session.wake) wake(true); });
+
+  VIEWS.driveSetup = function () {
+    const sv = driveSaved();
+    const q = driveQueue(sv.scope, sv.keys);
+    const resumable = q.length && (sv.ti > 0 || sv.pi > 0) && sv.ti < q.length;
+    const doms = DOMAINS.filter((d) => !d.bonus);
+    const mins = (list) => Math.round(list.reduce((n, t) => n + t.parts.join(" ").split(/\s+/).length, 0) / 150 / Number(settings.rate || 1));
+    $app.innerHTML = topbar() + `<button class="btn sm ghost" data-go="home">← Back</button>
+      <h1 style="margin-top:12px">🚗 Drive Mode</h1>
+      <p class="muted">Lectures you can listen to with your eyes on the road. Each objective has a spoken lesson covering what you need to know, the terms CompTIA tests, and exam tips. Optional <b>Key points</b> tracks after each lesson replay the main facts from every course section. Tracks play one after another until you stop.</p>
+      ${resumable ? `<button class="btn primary block" id="resume" style="margin:8px 0 14px;font-size:1.1rem;padding:16px">▶ Resume: ${esc(q[sv.ti].title)}</button>` : ""}
+      <div class="card">
+        <label class="field">What to play
+          <select id="scope">
+            <option value="all">Everything, in course order (${mins(driveQueue("all", sv.keys))} min)</option>
+            ${doms.map((d) => `<option value="${d.id}" ${sv.scope === String(d.id) ? "selected" : ""}>${d.icon} Domain ${d.id}.0 ${esc(d.name)} (${mins(driveQueue(String(d.id), sv.keys))} min)</option>`).join("")}
+            ${Object.keys(OBJECTIVES).filter((o) => /^\d/.test(o)).map((o) => `<option value="${o}" ${sv.scope === o ? "selected" : ""}>${o} ${esc(OBJECTIVES[o])}</option>`).join("")}
+            <option value="X.1" ${sv.scope === "X.1" ? "selected" : ""}>🏁 Exam Day Strategy</option>
+          </select></label>
+        <label class="row" style="margin-top:10px;flex-wrap:nowrap"><input type="checkbox" id="keys" ${sv.keys ? "checked" : ""}> Include the Key points review for each section</label>
+        <label class="row" style="margin-top:6px;flex-wrap:nowrap"><input type="checkbox" id="wake" ${sv.wake ? "checked" : ""}> Keep the screen on while playing</label>
+        <button class="btn primary block" id="start" style="margin-top:14px;font-size:1.1rem;padding:16px">▶ Start from the beginning</button>
+      </div>
+      <h2 style="margin-top:18px">Or pick a lesson</h2>
+      <div class="grid">${LESSON_TRACKS.map((t) => `<div class="card click" data-lesson="${esc(t.o)}" tabindex="0" style="padding:12px 14px"><div class="row spread"><b>🎙️ ${esc(t.title)}</b><span class="small muted">${mins([t])} min</span></div></div>`).join("")}</div>
+      <p class="small muted" style="margin-top:16px">🔊 Tips for the car: connect your phone over Bluetooth or CarPlay first, then press Start. For the best results use the ElevenLabs voice in ⚙️ Settings. It sounds more natural, and it keeps playing with the screen locked and works with your steering-wheel and lock-screen buttons (play, pause, next, back). The built-in device voice works too, but most phones pause it when the screen turns off, so leave "Keep the screen on" checked. With ElevenLabs, each segment is cached after the first play, so replays are free and start faster.</p>`;
+    const opts = () => ({ scope: $app.querySelector("#scope").value, keys: $app.querySelector("#keys").checked, wake: $app.querySelector("#wake").checked });
+    $app.querySelector("#start").onclick = () => driveStart(Object.assign(opts(), { ti: 0, pi: 0 }));
+    const r = $app.querySelector("#resume"); if (r) r.onclick = () => driveStart(sv);
+    $app.querySelectorAll("[data-lesson]").forEach((el) => (el.onclick = () => driveStart(Object.assign(opts(), { scope: el.dataset.lesson, ti: 0, pi: 0 }))));
+  };
+  function driveStart(o) {
+    const queue = driveQueue(o.scope, o.keys);
+    if (!queue.length) return toast("Nothing to play for that choice.");
+    session = { type: "drive", queue, scope: o.scope, keys: o.keys, wake: o.wake, ti: Math.min(o.ti || 0, queue.length - 1), pi: o.pi || 0, playing: true };
+    save(DRIVE_KEY, { scope: o.scope, keys: o.keys, wake: o.wake, ti: session.ti, pi: session.pi });
+    go("drive");
+  }
+  function driveSave() { const s = session; save(DRIVE_KEY, { scope: s.scope, keys: s.keys, wake: s.wake, ti: s.ti, pi: s.pi }); }
+  VIEWS.drive = function () {
+    const s = session, t = s.queue[s.ti], part = t.parts[s.pi] || "";
+    const prog = (s.pi + 1) / t.parts.length;
+    $app.innerHTML = topbar() + `
+      <div class="qhead"><b>🚗 Drive Mode</b><span class="small muted">Track ${s.ti + 1} / ${s.queue.length}</span></div>
+      <div class="card drive">
+        <span class="tag">${t.kind === "lesson" ? "🎙️ Lesson" : "🔑 Key points"} · ${esc(objLabel(t.o))}</span>
+        <h2 style="margin:10px 0 6px">${esc(t.title)}</h2>
+        <div class="bar" style="margin:8px 0 14px"><i style="width:${pct(prog)}%"></i></div>
+        <p class="drive-text">${esc(part)}</p>
+        <p class="small muted">Part ${s.pi + 1} of ${t.parts.length}${s.queue[s.ti + 1] ? ` · Up next: ${esc(s.queue[s.ti + 1].title)}` : ""}</p>
+      </div>
+      <div class="drive-controls">
+        <button class="btn" id="dprevT" aria-label="Previous track" ${s.ti === 0 ? "disabled" : ""}>⏮</button>
+        <button class="btn" id="dback" aria-label="Back one part">↺</button>
+        <button class="btn primary big" id="dpp" aria-label="${s.playing ? "Pause" : "Play"}">${s.playing ? "⏸" : "▶"}</button>
+        <button class="btn" id="dfwd" aria-label="Skip one part">↻</button>
+        <button class="btn" id="dnextT" aria-label="Next track" ${s.ti + 1 >= s.queue.length ? "disabled" : ""}>⏭</button>
+      </div>
+      <div class="row" style="justify-content:center;margin-top:12px">
+        <span class="small muted">Speed</span>${[0.9, 1, 1.15, 1.3, 1.5].map((r) => `<button class="btn sm ${Number(settings.rate) === r ? "primary" : "ghost"}" data-rate="${r}">${r}×</button>`).join("")}
+      </div>
+      <div class="row" style="justify-content:center;margin-top:14px"><button class="btn ghost" data-go="driveSetup">✖ Stop</button></div>`;
+    const $ = (id) => $app.querySelector("#" + id);
+    $("dpp").onclick = () => driveToggle();
+    $("dback").onclick = () => driveMove(0, -1);
+    $("dfwd").onclick = () => driveMove(0, 1);
+    $("dprevT").onclick = () => driveMove(-1, 0);
+    $("dnextT").onclick = () => driveMove(1, 0);
+    $app.querySelectorAll("[data-rate]").forEach((b) => (b.onclick = () => { settings.rate = Number(b.dataset.rate); save(SETTINGS_KEY, settings); if (s.playing) { TTS.stop(); } VIEWS.drive(); }));
+    driveMedia();
+    wake(s.playing && s.wake);
+    if (s.playing) runDrive();
+  };
+  function driveToggle() {
+    const s = session; if (!s || s.type !== "drive") return;
+    s.playing = !s.playing; if (!s.playing) TTS.stop();
+    VIEWS.drive();
+  }
+  // dt = change track, dp = change part (rolls over into neighbouring tracks).
+  function driveMove(dt, dp) {
+    const s = session; if (!s || s.type !== "drive") return;
+    TTS.stop(); clearTimeout(s.wait);
+    if (dt) { s.ti = Math.max(0, Math.min(s.queue.length - 1, s.ti + dt)); s.pi = 0; }
+    if (dp > 0) { if (s.pi + 1 < s.queue[s.ti].parts.length) s.pi++; else if (s.ti + 1 < s.queue.length) { s.ti++; s.pi = 0; } }
+    if (dp < 0) { if (s.pi > 0) s.pi--; else if (s.ti > 0) { s.ti--; s.pi = s.queue[s.ti].parts.length - 1; } }
+    driveSave();
+    if (view === "drive") VIEWS.drive();
+  }
+  function driveMedia() {
+    if (!("mediaSession" in navigator)) return;
+    const s = session, t = s.queue[s.ti];
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({ title: t.title, artist: "SecPlus Quest · Drive Mode", album: "Security+ SY0-701",
+        artwork: [{ src: "assets/logo.png", sizes: "512x512", type: "image/png" }] });
+      navigator.mediaSession.playbackState = s.playing ? "playing" : "paused";
+      const h = {
+        play: () => { if (!session.playing) driveToggle(); },
+        pause: () => { if (session.playing) driveToggle(); },
+        nexttrack: () => driveMove(1, 0),
+        previoustrack: () => driveMove(-1, 0),
+        seekforward: () => driveMove(0, 1),
+        seekbackward: () => driveMove(0, -1),
+      };
+      Object.keys(h).forEach((k) => { try { navigator.mediaSession.setActionHandler(k, () => { if (view === "drive") h[k](); }); } catch (e) {} });
+    } catch (e) {}
+  }
+  async function runDrive() {
+    const s = session, ti = s.ti, pi = s.pi, t = s.queue[ti];
+    const alive = () => view === "drive" && session === s && s.ti === ti && s.pi === pi && s.playing;
+    // Warm up the next segment so there's no gap between parts (ElevenLabs only).
+    const nxt = t.parts[pi + 1] || (s.queue[ti + 1] && s.queue[ti + 1].parts[0]);
+    const speaking = TTS.say([t.parts[pi]]);
+    if (nxt) TTS.prefetch(nxt);
+    const finished = await speaking;
+    if (!finished || !alive()) return;
+    await new Promise((r) => (s.wait = setTimeout(r, pi + 1 < t.parts.length ? 500 : 1500)));
+    if (!alive()) return;
+    if (pi + 1 < t.parts.length) s.pi++;
+    else if (ti + 1 < s.queue.length) { addXP(5); s.ti++; s.pi = 0; }
+    else { addXP(5); s.playing = false; s.ti = 0; s.pi = 0; driveSave(); wake(false); TTS.say(["That's the end of this playlist. Great studying!"]); VIEWS.drive(); return; }
+    driveSave(); VIEWS.drive();
   }
 
   // ---------- Stats ----------

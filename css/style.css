@@ -182,3 +182,9 @@ select.pbq-sel.no { border-color: var(--red); background: #3b1620; }
 .pbq-order li.ok { border-color: var(--green); }
 .pbq-order li.no { border-color: var(--red); }
 .navgrid button.pbqnav { font-size: .7rem; }
+
+/* Drive Mode: big, glanceable controls */
+.drive-text { font-size: 1.15rem; line-height: 1.6; }
+.drive-controls { display: flex; justify-content: center; gap: 12px; margin-top: 16px; }
+.drive-controls .btn { width: 64px; height: 64px; font-size: 1.5rem; border-radius: 50%; padding: 0; }
+.drive-controls .btn.big { width: 88px; height: 88px; font-size: 2.2rem; }
