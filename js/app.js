@@ -4,6 +4,7 @@
   "use strict";
 
   // ---------- Storage ----------
+  const APP_VERSION = "1.3.0";
   const STATE_KEY = "spq-state-v1";
   const SETTINGS_KEY = "spq-settings-v1";
   const LETTERS = ["A", "B", "C", "D", "E", "F"];
@@ -19,12 +20,17 @@
   const defaultState = () => ({ xp: 0, q: {}, exams: [], streakDays: 0, lastDay: null, today: { date: null, n: 0 }, bestCombo: 0, badges: [] });
   const defaultSettings = {
     engine: "browser", elKey: "", elVoice: "hpp4J3VqNfWAUOO0d1Us", elModel: "eleven_flash_v2_5",
-    rate: 1, browserVoice: "", autoRead: "off", dailyGoal: 30, audioPause: 6, practiceSize: 10,
+    rate: 1, browserVoice: "", autoRead: "off", dailyGoal: 30, audioPause: 6, practiceSize: 10, elVoices: [],
   };
   let state = load(STATE_KEY, defaultState());
   let settings = load(SETTINGS_KEY, defaultSettings);
   // Migrate the old default voice (Rachel) to the new default study voice (Bella).
   if (settings.elVoice === "21m00Tcm4TlvDq8ikWAM") settings.elVoice = defaultSettings.elVoice;
+  if (!settings.migratedEngine) {
+    settings.migratedEngine = true;
+    if (settings.elKey && /^sk_|^[0-9a-f]{32}$/i.test(String(settings.elKey).trim()) && settings.engine === "browser") settings.engine = "eleven";
+    save(SETTINGS_KEY, settings);
+  }
   const persist = () => save(STATE_KEY, state);
 
   // ---------- Helpers ----------
@@ -641,10 +647,13 @@
 
   // ---------- Settings ----------
   VIEWS.settings = function () {
-    const voices = ("speechSynthesis" in window ? speechSynthesis.getVoices() : []).filter((v) => /^en/i.test(v.lang));
+    const voices = browserVoices();
+    const elVoices = Array.isArray(settings.elVoices) && settings.elVoices.length ? settings.elVoices : [{ id: TTS.DEFAULT_VOICE, name: "Bella: Professional, Bright, Warm" }];
+    if (!elVoices.some((v) => v.id === settings.elVoice)) elVoices.unshift({ id: settings.elVoice, name: "Custom voice (" + settings.elVoice + ")" });
     $app.innerHTML = topbar() + `<button class="btn sm ghost" data-go="home">← Back</button>
       <h1 style="margin-top:12px">⚙️ Settings</h1>
       <div class="card"><h2>🔊 Voice</h2>
+        <div id="elStatus" class="explain" style="margin:0 0 14px"></div>
         <label class="field">Voice engine
           <select id="engine"><option value="browser">Built-in device voice (free)</option><option value="eleven">ElevenLabs (natural voice, uses your API key)</option></select></label>
         <label class="field">Read aloud automatically
@@ -652,14 +661,19 @@
         <label class="field">Speaking speed: <b><span id="rv">${settings.rate}</span>x</b>
           <input type="range" id="rate" min="0.6" max="1.6" step="0.1" value="${settings.rate}"></label>
         <label class="field">Built-in voice
-          <select id="bv"><option value="">Default</option>${voices.map((v) => `<option ${v.name === settings.browserVoice ? "selected" : ""}>${esc(v.name)}</option>`).join("")}</select></label>
+          <select id="bv">${browserVoiceOptions(voices)}</select></label>
         <hr><h3>ElevenLabs</h3>
-        <p class="small muted">Paste your API key from elevenlabs.io (Profile → API Keys). It's saved <b>only in this browser</b> and sent only to ElevenLabs. It never goes into the app code or GitHub. Audio is cached after the first play, so replaying the same question doesn't use more credits.</p>
-        <label class="field">API key <input type="password" id="elKey" value="${esc(settings.elKey)}" placeholder="sk_..." autocomplete="off"></label>
+        <p class="small muted">On elevenlabs.io go to <b>Developers → API Keys → Create Key</b>. Give it <b>Text to Speech: Access</b> and <b>Voices: Read</b>, then copy the key that starts with <span class="mono">sk_</span>. It's only shown once, and it's <i>not</i> the "Key ID". Paste it below. It's saved <b>only in this browser</b> and sent only to ElevenLabs. Audio is cached after the first play, so replays don't use credits.</p>
+        <label class="field">API key
+          <div class="row" style="flex-wrap:nowrap"><input type="password" id="elKey" value="${esc(settings.elKey)}" placeholder="sk_..." autocomplete="off" spellcheck="false">
+          <button class="btn sm ghost" id="showKey" type="button">Show</button></div></label>
         <label class="field">Voice
-          <select id="elVoice"><option value="${esc(settings.elVoice)}">${esc(settings.elVoice === "hpp4J3VqNfWAUOO0d1Us" ? "Bella: Professional, Bright, Warm (default)" : settings.elVoice)}</option></select></label>
-        <div class="row"><button class="btn sm" id="loadVoices">Load my ElevenLabs voices</button>
+          <select id="elVoice">${elVoices.map((v) => `<option value="${esc(v.id)}" ${v.id === settings.elVoice ? "selected" : ""}>${esc(v.name)}</option>`).join("")}</select></label>
+        <div class="row"><button class="btn sm" id="loadVoices">↻ Load my ElevenLabs voices</button>
           <select id="elModel" style="width:auto"><option value="eleven_flash_v2_5">Flash v2.5 (fast, cheaper)</option><option value="eleven_multilingual_v2">Multilingual v2 (richest quality)</option><option value="eleven_turbo_v2_5">Turbo v2.5</option></select></div>
+        <details style="margin-top:10px"><summary class="small muted">Advanced: use a voice ID</summary>
+          <label class="field" style="margin-top:8px">Voice ID (from ElevenLabs → Voices → ⋯ → Copy voice ID)
+            <div class="row" style="flex-wrap:nowrap"><input type="text" id="voiceId" placeholder="e.g. hpp4J3VqNfWAUOO0d1Us" spellcheck="false"><button class="btn sm" id="useVoiceId" type="button">Use</button></div></label></details>
         <div class="row" style="margin-top:12px"><button class="btn primary" id="test">▶ Test voice</button><button class="btn sm ghost" id="clr">Clear audio cache</button></div>
       </div>
       <div class="card" style="margin-top:14px"><h2>🎯 Study</h2>
@@ -667,33 +681,90 @@
         <label class="field">Questions per practice round <input type="number" id="psize" min="5" max="50" value="${settings.practiceSize}"></label>
       </div>
       <div class="card" style="margin-top:14px"><h2>💾 Progress</h2>
-        <p class="small muted">Progress lives in this browser. Export it to move it to another device.</p>
+        <p class="small muted">Progress and settings live in this browser. Export to move progress to another device.</p>
         <div class="row"><button class="btn sm" id="exp">Export progress</button>
         <label class="btn sm">Import progress<input type="file" id="imp" accept="application/json" hidden></label>
         <button class="btn sm ghost" id="reset" style="color:var(--red)">Reset all progress</button></div>
       </div>
-      <p class="small muted" style="margin-top:16px">${QBANK.length} questions loaded · SecPlus Quest is an independent study tool, not affiliated with CompTIA.</p>`;
+      <p class="small muted" style="margin-top:16px">${QBANK.length} questions loaded · v${APP_VERSION} · SecPlus Quest is an independent study tool, not affiliated with CompTIA.</p>`;
     const $ = (id) => $app.querySelector("#" + id);
     $("engine").value = settings.engine; $("autoRead").value = settings.autoRead; $("elModel").value = settings.elModel;
     const saveS = () => save(SETTINGS_KEY, settings);
-    $("engine").onchange = (e) => { settings.engine = e.target.value; saveS(); if (settings.engine === "eleven" && !settings.elKey) toast("Add your ElevenLabs API key below 👇"); };
+
+    // Status line: always tells you exactly what the voice will do and why.
+    function renderStatus(extra) {
+      const box = $("elStatus"); if (!box) return;
+      const prob = settings.elKey ? TTS.keyProblem(settings.elKey) : "";
+      const vName = (($("elVoice").selectedOptions[0] || {}).textContent || "").trim();
+      let html, bad = false;
+      if (extra) { html = extra.html; bad = extra.bad; }
+      else if (settings.elKey && prob) { html = "⚠️ " + esc(prob); bad = true; }
+      else if (settings.engine !== "eleven") html = settings.elKey && !prob ? "🔈 Using your <b>device voice</b>. Your ElevenLabs key is saved; switch <b>Voice engine</b> to ElevenLabs to use it." : "🔈 Using your <b>device voice</b> (free). Add an ElevenLabs key below for a natural voice.";
+      else if (!settings.elKey) { html = "⚠️ ElevenLabs is selected, but there's no API key yet. Paste it below. Until then, your device voice is used."; bad = true; }
+      else if (prob) { html = "⚠️ " + esc(prob); bad = true; }
+      else html = `✅ <b>ElevenLabs</b> is on · Voice: <b>${esc(vName)}</b> · Key ending <span class="mono">…${esc(settings.elKey.slice(-4))}</span>. Tap <b>▶ Test voice</b> to confirm.`;
+      box.className = "explain" + (bad ? " bad" : ""); box.innerHTML = `<div class="small">${html}</div>`;
+    }
+
+    async function loadVoices(quiet) {
+      const prob = TTS.keyProblem(settings.elKey);
+      if (prob) { renderStatus({ html: "⚠️ " + esc(prob), bad: true }); return; }
+      $("loadVoices").disabled = true; $("loadVoices").textContent = "Loading…";
+      try {
+        const vs = (await TTS.listElevenVoices(settings.elKey)).sort((a, b) => a.name.localeCompare(b.name));
+        settings.elVoices = vs; saveS();
+        if (!vs.some((v) => v.id === settings.elVoice)) vs.unshift({ id: settings.elVoice, name: "Current voice (" + settings.elVoice + ")" });
+        $("elVoice").innerHTML = vs.map((v) => `<option value="${esc(v.id)}" ${v.id === settings.elVoice ? "selected" : ""}>${esc(v.name)}</option>`).join("");
+        renderStatus();
+        if (!quiet) toast("Loaded " + settings.elVoices.length + " ElevenLabs voices ✅");
+      } catch (err) {
+        renderStatus({ html: "⚠️ Couldn't load voices: " + esc(err.message), bad: true });
+      } finally { $("loadVoices").disabled = false; $("loadVoices").textContent = "↻ Load my ElevenLabs voices"; }
+    }
+
+    $("engine").onchange = (e) => { settings.engine = e.target.value; saveS(); renderStatus(); };
     $("autoRead").onchange = (e) => { settings.autoRead = e.target.value; saveS(); };
     $("rate").oninput = (e) => { settings.rate = Number(e.target.value); $("rv").textContent = settings.rate; saveS(); };
     $("bv").onchange = (e) => { settings.browserVoice = e.target.value; saveS(); };
-    $("elKey").onchange = (e) => { settings.elKey = e.target.value.trim(); saveS(); toast("API key saved in this browser"); };
-    $("elVoice").onchange = (e) => { settings.elVoice = e.target.value; saveS(); };
+    // Save the key on every keystroke/paste (not only on blur), and switch to ElevenLabs automatically.
+    let keyTimer = null;
+    $("elKey").oninput = (e) => {
+      const before = settings.elKey;
+      settings.elKey = e.target.value.trim(); saveS();
+      clearTimeout(keyTimer);
+      keyTimer = setTimeout(() => {
+        const prob = settings.elKey ? TTS.keyProblem(settings.elKey) : "";
+        if (settings.elKey && !prob && settings.elKey !== before) {
+          settings.engine = "eleven"; $("engine").value = "eleven"; saveS();
+          TTS.clearCache().catch(() => {});
+          loadVoices(true);
+        }
+        renderStatus();
+      }, 350);
+    };
+    $("showKey").onclick = () => { const i = $("elKey"); const show = i.type === "password"; i.type = show ? "text" : "password"; $("showKey").textContent = show ? "Hide" : "Show"; };
+    $("elVoice").onchange = (e) => { settings.elVoice = e.target.value; saveS(); renderStatus(); };
+    $("useVoiceId").onclick = () => {
+      const id = $("voiceId").value.trim();
+      if (!/^[A-Za-z0-9]{10,40}$/.test(id)) { toast("That doesn't look like an ElevenLabs voice ID."); return; }
+      settings.elVoice = id; saveS();
+      if (![...$("elVoice").options].some((o) => o.value === id)) $("elVoice").insertAdjacentHTML("afterbegin", `<option value="${esc(id)}">Custom voice (${esc(id)})</option>`);
+      $("elVoice").value = id; renderStatus(); toast("Voice set ✅ Tap ▶ Test voice");
+    };
     $("elModel").onchange = (e) => { settings.elModel = e.target.value; saveS(); };
     $("goal").onchange = (e) => { settings.dailyGoal = Math.max(5, Number(e.target.value) || 30); saveS(); };
     $("psize").onchange = (e) => { settings.practiceSize = Math.min(50, Math.max(5, Number(e.target.value) || 10)); saveS(); };
-    $("loadVoices").onclick = async () => {
-      settings.elKey = $("elKey").value.trim(); saveS();
-      try {
-        const vs = await TTS.listElevenVoices(settings.elKey);
-        $("elVoice").innerHTML = vs.map((v) => `<option value="${esc(v.id)}" ${v.id === settings.elVoice ? "selected" : ""}>${esc(v.name)}</option>`).join("");
-        toast("Loaded " + vs.length + " voices");
-      } catch (err) { toast(err.message); }
+    $("loadVoices").onclick = () => loadVoices(false);
+    $("test").onclick = async () => {
+      const line = "Welcome to SecPlus Quest. The CIA triad stands for confidentiality, integrity, and availability. Let's go pass Security Plus!";
+      if (settings.engine !== "eleven") { renderStatus(); TTS.say([line]); return; }
+      $("test").disabled = true; $("test").textContent = "⏳ Generating…";
+      const r = await TTS.testEleven(line);
+      $("test").disabled = false; $("test").textContent = "▶ Test voice";
+      if (r.ok) renderStatus({ html: `✅ <b>ElevenLabs is working!</b> That was <b>${esc((($("elVoice").selectedOptions[0] || {}).textContent || "").trim())}</b>. You're all set.` });
+      else renderStatus({ html: "⚠️ " + esc(r.message), bad: true });
     };
-    $("test").onclick = () => TTS.say(["Welcome to SecPlus Quest. The CIA triad stands for confidentiality, integrity, and availability. Let's go pass Security Plus!"]);
+    renderStatus();
     $("clr").onclick = async () => { await TTS.clearCache(); toast("Audio cache cleared"); };
     $("exp").onclick = () => {
       const blob = new Blob([JSON.stringify(state)], { type: "application/json" });
@@ -709,7 +780,14 @@
       state = defaultState(); persist(); toast("Progress reset"); go("home");
     };
   };
-  if ("speechSynthesis" in window) speechSynthesis.onvoiceschanged = () => { if (view === "settings") VIEWS.settings(); };
+  function browserVoices() { return ("speechSynthesis" in window ? speechSynthesis.getVoices() : []).filter((v) => /^en/i.test(v.lang)); }
+  function browserVoiceOptions(voices) {
+    return `<option value="">Default</option>` + voices.map((v) => `<option ${v.name === settings.browserVoice ? "selected" : ""}>${esc(v.name)}</option>`).join("");
+  }
+  if ("speechSynthesis" in window) speechSynthesis.onvoiceschanged = () => {
+    const sel = view === "settings" && document.getElementById("bv");
+    if (sel) sel.innerHTML = browserVoiceOptions(browserVoices());
+  };
 
   // ---------- Keyboard ----------
   document.addEventListener("keydown", (e) => {
