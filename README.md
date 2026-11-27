@@ -30,6 +30,12 @@
 
 **Every learning style:** 👀 visual progress and color-coded feedback · 👂 audio narration of questions *and* explanations · 📖 a written explanation for every answer · 🎮 hands-on gameplay with keyboard shortcuts (`1`–`4` to answer, `Enter` for next, `R` to read aloud).
 
+## 🎤 Talk to it: questions read aloud, answers by voice
+
+In every practice round, the app reads the question and choices to you. Then it listens: say **"A," "B," "C," or "D"** (or "bee," "option C," "number two," or the answer itself). It tells you right away if you're **right or wrong and why**. Then say **"next"** to keep going, **"repeat"** to hear it again, or **"explain"** for the reason. Tap **🎤 Speak** (or press **M**) any time to answer by voice. You can turn this off in ⚙️ Settings → *Answer by voice*.
+
+Voice answers use the browser's built-in speech recognition (Chrome, Edge, or Safari on iPhone/Mac). The app doesn't record or store anything you say.
+
 ## 🔊 Voice: built-in or ElevenLabs
 
 - **Default:** your device's built-in voice. It's free and needs no setup.
@@ -56,6 +62,7 @@ index.html          App shell
 css/style.css       Navy / teal / gold theme, mobile-first
 js/meta.js          Exam blueprint, objectives, ranks, question loader
 js/tts.js           Voice engine (Web Speech + ElevenLabs with caching)
+js/voice.js         Voice answers (speech recognition + spoken-answer parsing)
 js/app.js           Game engine: modes, scoring, spaced repetition, progress
 data/d1.js … d5.js  Core Security+ question banks by domain
 data/m1.js … m5.js  Course-section banks (QS(), in course order)

@@ -4,7 +4,7 @@
   "use strict";
 
   // ---------- Storage ----------
-  const APP_VERSION = "1.5.0";
+  const APP_VERSION = "1.6.0";
   const STATE_KEY = "spq-state-v1";
   const SETTINGS_KEY = "spq-settings-v1";
   const LETTERS = ["A", "B", "C", "D", "E", "F"];
@@ -20,7 +20,7 @@
   const defaultState = () => ({ xp: 0, q: {}, pbq: {}, exams: [], streakDays: 0, lastDay: null, today: { date: null, n: 0 }, bestCombo: 0, badges: [] });
   const defaultSettings = {
     engine: "browser", elKey: "", elVoice: "bIHbv24MWmeRgasZH58o", elModel: "eleven_flash_v2_5",
-    rate: 1, browserVoice: "", autoRead: "off", dailyGoal: 30, audioPause: 6, practiceSize: 10, elVoices: [],
+    rate: 1, browserVoice: "", autoRead: "all", voiceAnswer: "on", dailyGoal: 30, audioPause: 6, practiceSize: 10, elVoices: [],
   };
   let state = load(STATE_KEY, defaultState());
   state.pbq = state.pbq || {};
@@ -30,6 +30,13 @@
   if (!settings.migratedEngine) {
     settings.migratedEngine = true;
     if (settings.elKey && /^sk_|^[0-9a-f]{32}$/i.test(String(settings.elKey).trim()) && settings.engine === "browser") settings.engine = "eleven";
+    save(SETTINGS_KEY, settings);
+  }
+  // v1.6: questions are read aloud and you can answer by voice, out of the box.
+  if (!settings.migratedVoice16) {
+    settings.migratedVoice16 = true;
+    if (settings.autoRead === "off") settings.autoRead = "all";
+    if (!settings.voiceAnswer) settings.voiceAnswer = "on";
     save(SETTINGS_KEY, settings);
   }
   const persist = () => save(STATE_KEY, state);
@@ -119,11 +126,20 @@
   function answerSpeech(it) {
     return ["The correct answer is " + LETTERS[it.correct] + ". " + it.q.a[it.q.c] + ".", it.q.e];
   }
+  // Spoken right/wrong feedback after you answer, with the reason why.
+  function feedbackSpeech(it, withWhy) {
+    const right = LETTERS[it.correct] + ". " + it.q.a[it.q.c] + ".";
+    const head = it.picked === it.correct ? "Correct! " + right
+      : it.picked === -1 ? (session && session.timed ? "Time's up. " : "Okay, let's go over it. ") + "The correct answer is " + right
+      : "Not quite. You picked " + LETTERS[it.picked] + ". The correct answer is " + right;
+    return withWhy ? [head, it.q.e] : [head];
+  }
+  const voiceOn = () => settings.voiceAnswer === "on" && VoiceIn.supported();
 
   // ---------- Router ----------
   let view = null, session = null, timerId = null;
   function go(v, data) {
-    TTS.stop(); clearInterval(timerId); timerId = null;
+    TTS.stop(); VoiceIn.stop(); clearInterval(timerId); timerId = null;
     view = v; window.scrollTo(0, 0);
     VIEWS[v](data);
   }
@@ -195,7 +211,7 @@
           <div class="small muted" style="margin:6px 0">${qs.length} questions · ${pct(m)}% mastered</div>
           <div class="bar"><i style="width:${pct(m)}%"></i></div></div>`;
       }).join("")}</div>
-      <p class="small muted" style="margin-top:22px">Tip: press <span class="kbd">1</span>–<span class="kbd">4</span> to answer, <span class="kbd">Enter</span> for next, and <span class="kbd">R</span> to read aloud.</p>`;
+      <p class="small muted" style="margin-top:22px">Tip: press <span class="kbd">1</span>–<span class="kbd">4</span> to answer, <span class="kbd">Enter</span> for next, <span class="kbd">R</span> to read aloud, and <span class="kbd">M</span> to answer by voice. 🎤 Questions are read to you automatically, and you can say your answer out loud.</p>`;
   };
 
   // ---------- Course Path (follows the course section order) ----------
@@ -284,7 +300,8 @@
       <div class="bar" style="margin-bottom:14px"><i style="width:${pct(s.i / n)}%"></i></div>
       <div class="card ${answered && !ok ? "shake" : ""}">
         <div class="row spread"><span class="tag">${it.q.o} · ${esc(it.q.t)}</span>
-          <button class="btn sm ghost" id="readQ" title="Read question aloud (R)">🔊 Read</button></div>
+          <div class="row">${voiceOn() ? `<button class="btn sm ghost mic" id="mic" title="Answer by voice (M)">🎤 Speak</button>` : ""}
+          <button class="btn sm ghost" id="readQ" title="Read question aloud (R)">🔊 Read</button></div></div>
         <div class="question">${esc(it.q.q)}</div>
         <div class="choices">${it.order.map((ci, i) => {
           let cls = "choice";
@@ -292,27 +309,78 @@
           return `<button class="${cls}" data-i="${i}" ${answered ? "disabled" : ""}><span class="key">${LETTERS[i]}</span><span>${esc(it.q.a[ci])}</span></button>`;
         }).join("")}</div>
         ${answered ? `<div class="explain ${ok ? "" : "bad"}">
-          <div class="row spread"><h3>${ok ? "✅ Correct!" : it.picked === -1 ? "⏰ Time's up!" : "❌ Not quite."} ${s.lastXP ? `<span class="xp-pop">+${s.lastXP} XP</span>` : ""}</h3>
+          <div class="row spread"><h3>${ok ? "✅ Correct!" : it.picked === -1 ? (s.timed ? "⏰ Time's up!" : "⏭ Skipped") : "❌ Not quite."} ${s.lastXP ? `<span class="xp-pop">+${s.lastXP} XP</span>` : ""}</h3>
             <button class="btn sm ghost" id="readE">🔊 Explain it to me</button></div>
           <p><b>Answer: ${LETTERS[it.correct]}. ${esc(it.q.a[it.q.c])}</b></p><p>${esc(it.q.e)}</p></div>` : ""}
       </div>
+      ${voiceOn() ? `<p class="small muted vstat" id="vstat" aria-live="polite"></p>` : ""}
       <div class="footer-actions">
         <button class="btn ghost" data-go="${s.back || "home"}">✖ Quit</button>
         ${answered ? `<button class="btn primary" id="next">${s.i + 1 < n ? "Next →" : "See results 🏁"}</button>` : ""}
       </div>`;
 
     $app.querySelectorAll(".choice").forEach((b) => (b.onclick = () => answer(Number(b.dataset.i))));
-    $app.querySelector("#readQ").onclick = () => TTS.say(questionSpeech(it));
-    const re = $app.querySelector("#readE"); if (re) re.onclick = () => TTS.say(answerSpeech(it));
+    $app.querySelector("#readQ").onclick = () => { VoiceIn.stop(); speakThenListen(answered ? feedbackSpeech(it, true) : questionSpeech(it)); };
+    const re = $app.querySelector("#readE"); if (re) re.onclick = () => { VoiceIn.stop(); speakThenListen(feedbackSpeech(it, true)); };
+    const mic = $app.querySelector("#mic"); if (mic) mic.onclick = () => { TTS.stop(); s.heardTries = 0; listenNow(); };
     const nx = $app.querySelector("#next"); if (nx) { nx.onclick = nextQ; nx.focus(); }
 
     if (!answered) {
-      if (settings.autoRead !== "off") TTS.say(questionSpeech(it));
-      if (s.timed) startQTimer();
-    } else if (settings.autoRead === "all" && !s.spokeAnswer) {
-      s.spokeAnswer = true; TTS.say(answerSpeech(it));
+      s.heardTries = 0;
+      // Timed rounds: the clock starts after the question has been read to you.
+      if (settings.autoRead !== "off") speakThenListen(questionSpeech(it), s.timed ? startQTimer : null);
+      else { if (s.timed) startQTimer(); if (voiceOn()) listenNow(); }
+    } else if (!s.spokeAnswer && (settings.autoRead !== "off" || s.byVoice)) {
+      s.spokeAnswer = true;
+      speakThenListen(feedbackSpeech(it, settings.autoRead === "all" || s.byVoice));
     }
   };
+
+  // ---------- Voice answers ----------
+  // Read something, then (if voice answers are on) listen for the answer or a command.
+  async function speakThenListen(chunks, after) {
+    const s = session, idx = s.i;
+    const finished = await TTS.say(chunks);
+    const here = view === "quiz" && session === s && s.i === idx;
+    if (after && here && s.items[idx].picked === null) after(); // (also runs if the read-out was cut short)
+    if (finished && here) listenNow();
+  }
+  function vstat(html, cls) {
+    const el = document.getElementById("vstat"); if (el) { el.innerHTML = html; el.className = "small vstat " + (cls || "muted"); }
+    const m = document.getElementById("mic"); if (m) m.classList.toggle("on", cls === "live");
+  }
+  function listenNow() {
+    if (!voiceOn() || view !== "quiz") return;
+    const s = session, idx = s.i, it = s.items[idx];
+    const alive = () => view === "quiz" && session === s && s.i === idx;
+    const waitingNext = it.picked !== null;
+    const hint = waitingNext ? `Say <b>"next"</b>, <b>"repeat"</b>, or <b>"explain"</b>.` : `Say <b>A</b>, <b>B</b>, <b>C</b>${it.order.length > 3 ? `, or <b>D</b>` : ""} (or the answer itself). Say <b>"repeat"</b> to hear it again.`;
+    VoiceIn.listen({
+      onStart: () => alive() && vstat("🎤 Listening… " + hint, "live"),
+      onHeard: (alts) => {
+        if (!alive()) return;
+        let r = null;
+        for (const a of alts) { r = VoiceIn.parse(a, it.order.map((ci) => it.q.a[ci])); if (r) break; }
+        vstat(`🗣️ Heard: “${esc(alts[0] || "")}”`);
+        if (r && r.pick !== undefined && !waitingNext) { s.byVoice = true; return answer(r.pick); }
+        if (r && r.cmd === "next" && waitingNext) return nextQ();
+        if (r && r.cmd === "skip" && !waitingNext) { s.byVoice = true; return answer(-1); }
+        if (r && r.cmd === "repeat") return speakThenListen(waitingNext ? feedbackSpeech(it, true) : questionSpeech(it));
+        if (r && r.cmd === "explain") return speakThenListen(waitingNext ? feedbackSpeech(it, true) : ["Answer first, then I'll explain it.", ...questionSpeech(it).slice(1)]);
+        if (r && r.cmd === "stop") return vstat("🎤 Voice paused. Tap <b>🎤 Speak</b> when you're ready.");
+        s.heardTries = (s.heardTries || 0) + 1;
+        if (s.heardTries > 3) return vstat("🎤 I couldn't make that out. Tap <b>🎤 Speak</b> to try again, or tap your answer.");
+        speakThenListen([waitingNext ? "Sorry, I didn't catch that. Say next, repeat, or explain." : "Sorry, I didn't catch that. Say A, B, C, or D."]);
+      },
+      onEnd: (why) => {
+        if (!alive()) return;
+        if (why === "not-allowed") { vstat("🎤 Microphone is blocked. Tap <b>🎤 Speak</b> and allow the microphone, or check your browser's site settings.", "bad"); return; }
+        if (why === "no-speech" && (s.silent = (s.silent || 0) + 1) <= 2) return listenNow(); // keep waiting a little longer
+        s.silent = 0;
+        vstat("🎤 Stopped listening. Tap <b>🎤 Speak</b> to answer by voice.");
+      },
+    });
+  }
   function startQTimer() {
     let left = session.timed;
     clearInterval(timerId);
@@ -326,7 +394,7 @@
   function answer(i) {
     const s = session, it = s.items[s.i];
     if (it.picked !== null) return;
-    clearInterval(timerId); TTS.stop();
+    clearInterval(timerId); TTS.stop(); VoiceIn.stop();
     it.picked = i; s.spokeAnswer = false;
     const ok = i === it.correct;
     record(it.q.id, ok);
@@ -340,7 +408,7 @@
     VIEWS.quiz();
   }
   function nextQ() {
-    TTS.stop(); session.lastXP = 0;
+    TTS.stop(); VoiceIn.stop(); session.lastXP = 0; session.byVoice = false; session.silent = 0;
     if (session.i + 1 < session.items.length) { session.i++; VIEWS.quiz(); }
     else go("results");
   }
@@ -842,7 +910,10 @@
         <label class="field">Voice engine
           <select id="engine"><option value="browser">Built-in device voice (free)</option><option value="eleven">ElevenLabs (natural voice, uses your API key)</option></select></label>
         <label class="field">Read aloud automatically
-          <select id="autoRead"><option value="off">Off (tap 🔊 when you want it)</option><option value="q">Read each question</option><option value="all">Read questions and explanations</option></select></label>
+          <select id="autoRead"><option value="off">Off (tap 🔊 when you want it)</option><option value="q">Read each question</option><option value="all">Read questions, right/wrong, and the explanation</option></select></label>
+        <label class="field">Answer by voice 🎤
+          <select id="voiceAnswer"><option value="on">On: after a question is read, say A, B, C, or D</option><option value="off">Off (tap your answers)</option></select></label>
+        ${VoiceIn.supported() ? "" : `<p class="small" style="color:var(--gold)">⚠️ This browser doesn't support voice answers. Use Chrome, Edge, or Safari on iPhone/Mac.</p>`}
         <label class="field">Speaking speed: <b><span id="rv">${settings.rate}</span>x</b>
           <input type="range" id="rate" min="0.6" max="1.6" step="0.1" value="${settings.rate}"></label>
         <label class="field">Built-in voice
@@ -873,7 +944,7 @@
       </div>
       <p class="small muted" style="margin-top:16px">${QBANK.length} questions loaded · v${APP_VERSION} · SecPlus Quest is an independent study tool, not affiliated with CompTIA.</p>`;
     const $ = (id) => $app.querySelector("#" + id);
-    $("engine").value = settings.engine; $("autoRead").value = settings.autoRead; $("elModel").value = settings.elModel;
+    $("engine").value = settings.engine; $("autoRead").value = settings.autoRead; $("voiceAnswer").value = settings.voiceAnswer || "on"; $("elModel").value = settings.elModel;
     const saveS = () => save(SETTINGS_KEY, settings);
 
     // Status line: always tells you exactly what the voice will do and why.
@@ -909,6 +980,7 @@
 
     $("engine").onchange = (e) => { settings.engine = e.target.value; saveS(); renderStatus(); };
     $("autoRead").onchange = (e) => { settings.autoRead = e.target.value; saveS(); };
+    $("voiceAnswer").onchange = (e) => { settings.voiceAnswer = e.target.value; saveS(); };
     $("rate").oninput = (e) => { settings.rate = Number(e.target.value); $("rv").textContent = settings.rate; saveS(); };
     $("bv").onchange = (e) => { settings.browserVoice = e.target.value; saveS(); };
     // Save the key on every keystroke/paste (not only on blur), and switch to ElevenLabs automatically.
@@ -982,7 +1054,8 @@
       const it = session.items[session.i];
       if (/^[1-6]$/.test(k) && it.picked === null && Number(k) <= it.order.length) answer(Number(k) - 1);
       else if (k === "enter" && it.picked !== null) { e.preventDefault(); nextQ(); }
-      else if (k === "r") TTS.say(it.picked === null ? questionSpeech(it) : answerSpeech(it));
+      else if (k === "r") { VoiceIn.stop(); speakThenListen(it.picked === null ? questionSpeech(it) : feedbackSpeech(it, true)); }
+      else if (k === "m" && voiceOn()) { TTS.stop(); session.heardTries = 0; listenNow(); }
     } else if (view === "exam") {
       const it = session.items[session.i];
       if (!it.pbq && /^[1-6]$/.test(k) && Number(k) <= it.order.length) { it.picked = Number(k) - 1; VIEWS.exam(); }
