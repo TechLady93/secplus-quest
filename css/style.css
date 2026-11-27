@@ -189,3 +189,5 @@ select.pbq-sel.no { border-color: var(--red); background: #3b1620; }
 .vstat.bad { color: var(--red); }
 .mic.on { color: var(--teal); border-color: var(--teal); animation: micpulse 1.2s ease-in-out infinite; }
 @keyframes micpulse { 0%,100% { box-shadow: 0 0 0 0 rgba(45,212,191,.5) } 50% { box-shadow: 0 0 0 6px rgba(45,212,191,0) } }
+
+.vbanner { display:flex; gap:10px; align-items:center; justify-content:space-between; margin:0 0 12px; padding:10px 12px; border-radius:10px; background:#24121c; border:1px solid #6b2a3a; font-size:.9rem; }

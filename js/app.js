@@ -4,7 +4,7 @@
   "use strict";
 
   // ---------- Storage ----------
-  const APP_VERSION = "1.6.0";
+  const APP_VERSION = "1.7.0";
   const STATE_KEY = "spq-state-v1";
   const SETTINGS_KEY = "spq-settings-v1";
   const LETTERS = ["A", "B", "C", "D", "E", "F"];
@@ -19,7 +19,7 @@
 
   const defaultState = () => ({ xp: 0, q: {}, pbq: {}, exams: [], streakDays: 0, lastDay: null, today: { date: null, n: 0 }, bestCombo: 0, badges: [] });
   const defaultSettings = {
-    engine: "browser", elKey: "", elVoice: "bIHbv24MWmeRgasZH58o", elModel: "eleven_flash_v2_5",
+    engine: "eleven", deviceFallback: "off", elKey: "", elVoice: "bIHbv24MWmeRgasZH58o", elModel: "eleven_flash_v2_5",
     rate: 1, browserVoice: "", autoRead: "all", voiceAnswer: "on", dailyGoal: 30, audioPause: 6, practiceSize: 10, elVoices: [],
   };
   let state = load(STATE_KEY, defaultState());
@@ -32,6 +32,39 @@
     if (settings.elKey && /^sk_|^[0-9a-f]{32}$/i.test(String(settings.elKey).trim()) && settings.engine === "browser") settings.engine = "eleven";
     save(SETTINGS_KEY, settings);
   }
+  // ---- Keep ElevenLabs as THE voice ----
+  const validKey = (k) => !!k && !TTS.keyProblem(k);
+  // 1) Private setup link (…/#setup=…) restores your key + voice in any browser with one tap.
+  //    The part after # never leaves the device (it isn't sent to GitHub).
+  function restoreFromLink() {
+    const m = location.hash.match(/^#setup=([A-Za-z0-9_-]+)/);
+    if (!m) return false;
+    try {
+      const j = JSON.parse(decodeURIComponent(escape(atob(m[1].replace(/-/g, "+").replace(/_/g, "/")))));
+      if (!validKey(j.k)) throw new Error("bad key");
+      Object.assign(settings, { elKey: j.k, engine: "eleven", engineChosen: false, pickedVoice: true });
+      if (j.v) settings.elVoice = j.v;
+      if (j.m) settings.elModel = j.m;
+      if (j.r) settings.rate = j.r;
+      save(SETTINGS_KEY, settings);
+      setTimeout(() => toast("✅ Your ElevenLabs voice is set up in this browser"), 400);
+    } catch (e) { setTimeout(() => toast("That setup link didn't work. Make a new one in ⚙️ Settings."), 400); }
+    history.replaceState(null, "", location.pathname + location.search); // remove the key from the address bar
+    return true;
+  }
+  restoreFromLink();
+  // Also works if the link is opened while the app is already open in this tab.
+  window.addEventListener("hashchange", () => { if (restoreFromLink()) { voiceIssue = ""; go("home"); } });
+  // 2) If a key is saved, always use ElevenLabs (unless you deliberately picked the device voice).
+  if (validKey(settings.elKey) && settings.engine !== "eleven" && !settings.engineChosen) { settings.engine = "eleven"; save(SETTINGS_KEY, settings); }
+  // 3) Ask the browser not to clear this site's storage (helps Safari keep your key).
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist().catch(() => {}); } catch (e) {}
+  function setupLink() {
+    const j = { k: settings.elKey.trim(), v: settings.elVoice, m: settings.elModel, r: settings.rate };
+    const b = btoa(unescape(encodeURIComponent(JSON.stringify(j)))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    return location.origin + location.pathname + "#setup=" + b;
+  }
+
   // v1.6: questions are read aloud and you can answer by voice, out of the box.
   if (!settings.migratedVoice16) {
     settings.migratedVoice16 = true;
@@ -143,16 +176,31 @@
     view = v; window.scrollTo(0, 0);
     VIEWS[v](data);
   }
+  // Sticky banner when the ElevenLabs voice can't play (instead of a robot voice).
+  let voiceIssue = "";
+  function voiceBannerHTML() {
+    if (settings.engine !== "eleven") return "";
+    const msg = !validKey(settings.elKey) ? "Your ElevenLabs voice isn't set up in this browser yet. Open your private setup link, or paste your key in Settings." : voiceIssue;
+    return msg ? `<div class="vbanner" id="vbanner"><span>🔇 ${esc(msg)}</span><button class="btn sm" data-go="settings">Fix it</button></div>` : "";
+  }
+  function voiceProblem(msg) {
+    voiceIssue = msg;
+    const old = document.getElementById("vbanner"); if (old) old.remove();
+    const tb = document.querySelector(".topbar"); if (tb) tb.insertAdjacentHTML("afterend", voiceBannerHTML());
+    toast("🔇 " + msg);
+  }
+  function voiceOk() { if (voiceIssue) { voiceIssue = ""; const b = document.getElementById("vbanner"); if (b) b.remove(); } }
   function topbar(extra) {
     const r = rankFor(state.xp);
-    return `<div class="topbar">
+    return voiceBannerWrap(`<div class="topbar">
       <div class="brand" data-go="home" tabindex="0"><img src="assets/logo.svg" alt="" width="26" height="26" style="vertical-align:-6px;margin-right:6px">SecPlus <span>Quest</span></div>
       <div class="row">${extra || ""}
         <span class="chip gold" title="Experience points">${r.badge} ${state.xp} XP</span>
         <span class="chip" title="Daily streak">🔥 ${state.streakDays}</span>
         <button class="btn sm ghost" data-go="settings" aria-label="Settings">⚙️</button>
-      </div></div>`;
+      </div></div>`);
   }
+  const voiceBannerWrap = (html) => html + voiceBannerHTML();
   $app.addEventListener("click", (e) => {
     const g = e.target.closest("[data-go]");
     if (g) { e.preventDefault(); const arg = g.dataset.arg; go(g.dataset.go, arg !== undefined ? arg : undefined); }
@@ -908,7 +956,9 @@
       <div class="card"><h2>🔊 Voice</h2>
         <div id="elStatus" class="explain" style="margin:0 0 14px"></div>
         <label class="field">Voice engine
-          <select id="engine"><option value="browser">Built-in device voice (free)</option><option value="eleven">ElevenLabs (natural voice, uses your API key)</option></select></label>
+          <select id="engine"><option value="eleven">ElevenLabs (natural voice, uses your API key)</option><option value="browser">Built-in device voice (robotic, free)</option></select></label>
+        <label class="field">Device voice backup (if ElevenLabs can't play)
+          <select id="fallback"><option value="off">Off: never switch to the robot voice, show me what's wrong</option><option value="on">On: use the device voice until ElevenLabs works again</option></select></label>
         <label class="field">Read aloud automatically
           <select id="autoRead"><option value="off">Off (tap 🔊 when you want it)</option><option value="q">Read each question</option><option value="all">Read questions, right/wrong, and the explanation</option></select></label>
         <label class="field">Answer by voice 🎤
@@ -931,6 +981,9 @@
           <label class="field" style="margin-top:8px">Voice ID (from ElevenLabs → Voices → ⋯ → Copy voice ID)
             <div class="row" style="flex-wrap:nowrap"><input type="text" id="voiceId" placeholder="e.g. bIHbv24MWmeRgasZH58o" spellcheck="false"><button class="btn sm" id="useVoiceId" type="button">Use</button></div></label></details>
         <div class="row" style="margin-top:12px"><button class="btn primary" id="test">▶ Test voice</button><button class="btn sm ghost" id="clr">Clear audio cache</button></div>
+        <hr><h3>🔗 Your private setup link</h3>
+        <p class="small muted">Your key is saved in <b>this browser only</b>. A different browser, the home-screen app, or Safari clearing old site data will start without it. Save this link once (for example, in your password manager or a locked note). Opening it on any phone or computer sets up your key and voice in one tap. <b>Treat it like a password:</b> don't post or share it.</p>
+        <div class="row"><button class="btn sm" id="mkLink" ${validKey(settings.elKey) ? "" : "disabled"}>📋 Copy my setup link</button>${navigator.share ? `<button class="btn sm ghost" id="shLink" ${validKey(settings.elKey) ? "" : "disabled"}>Save to Notes…</button>` : ""}</div>
       </div>
       <div class="card" style="margin-top:14px"><h2>🎯 Study</h2>
         <label class="field">Daily goal (questions) <input type="number" id="goal" min="5" max="300" value="${settings.dailyGoal}"></label>
@@ -944,7 +997,7 @@
       </div>
       <p class="small muted" style="margin-top:16px">${QBANK.length} questions loaded · v${APP_VERSION} · SecPlus Quest is an independent study tool, not affiliated with CompTIA.</p>`;
     const $ = (id) => $app.querySelector("#" + id);
-    $("engine").value = settings.engine; $("autoRead").value = settings.autoRead; $("voiceAnswer").value = settings.voiceAnswer || "on"; $("elModel").value = settings.elModel;
+    $("engine").value = settings.engine; $("autoRead").value = settings.autoRead; $("fallback").value = settings.deviceFallback || "off"; $("voiceAnswer").value = settings.voiceAnswer || "on"; $("elModel").value = settings.elModel;
     const saveS = () => save(SETTINGS_KEY, settings);
 
     // Status line: always tells you exactly what the voice will do and why.
@@ -978,7 +1031,13 @@
       } finally { $("loadVoices").disabled = false; $("loadVoices").textContent = "↻ Load my ElevenLabs voices"; }
     }
 
-    $("engine").onchange = (e) => { settings.engine = e.target.value; saveS(); renderStatus(); };
+    $("engine").onchange = (e) => { settings.engine = e.target.value; settings.engineChosen = e.target.value !== "eleven"; saveS(); renderStatus(); };
+    $("fallback").onchange = (e) => { settings.deviceFallback = e.target.value; saveS(); };
+    $("mkLink").onclick = async () => {
+      try { await navigator.clipboard.writeText(setupLink()); toast("🔗 Setup link copied. Paste it somewhere private."); }
+      catch (e) { toast("Couldn't copy automatically. Try “Save to Notes…”."); }
+    };
+    const sh = $("shLink"); if (sh) sh.onclick = () => navigator.share({ title: "SecPlus Quest setup (private)", url: setupLink() }).catch(() => {});
     $("autoRead").onchange = (e) => { settings.autoRead = e.target.value; saveS(); };
     $("voiceAnswer").onchange = (e) => { settings.voiceAnswer = e.target.value; saveS(); };
     $("rate").oninput = (e) => { settings.rate = Number(e.target.value); $("rv").textContent = settings.rate; saveS(); };
@@ -992,7 +1051,8 @@
       keyTimer = setTimeout(() => {
         const prob = settings.elKey ? TTS.keyProblem(settings.elKey) : "";
         if (settings.elKey && !prob && settings.elKey !== before) {
-          settings.engine = "eleven"; $("engine").value = "eleven"; saveS();
+          settings.engine = "eleven"; settings.engineChosen = false; $("engine").value = "eleven"; saveS();
+          $("mkLink").disabled = false; if ($("shLink")) $("shLink").disabled = false;
           TTS.clearCache().catch(() => {});
           loadVoices(true);
         }
@@ -1065,6 +1125,6 @@
     } else if (view === "flash" && (k === " " || k === "enter") && !session.flipped) { e.preventDefault(); session.flipped = true; VIEWS.flash(); }
   });
 
-  window.App = { settings: () => settings, toast, go };
+  window.App = { settings: () => settings, toast, go, voiceProblem, voiceOk };
   go("home");
 })();

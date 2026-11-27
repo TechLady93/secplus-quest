@@ -37,6 +37,9 @@ window.TTS = (function () {
 
   function settings() { return window.App ? window.App.settings() : {}; }
   function toast(m) { if (window.App) window.App.toast(m); }
+  // Tell the app (sticky banner) when ElevenLabs can't play, and when it works again.
+  function report(msg) { if (window.App && window.App.voiceProblem) window.App.voiceProblem(msg); else toast("🔇 " + msg); }
+  function ok() { if (window.App && window.App.voiceOk) window.App.voiceOk(); }
 
   function stop() {
     speakToken++;
@@ -151,12 +154,15 @@ window.TTS = (function () {
     });
   }
 
-  // Speak a list of text chunks in order. Resolves true if it finished (not interrupted).
+  /* Speak a list of text chunks in order. Resolves true if it finished (not interrupted).
+   * With ElevenLabs on, the robotic device voice is NEVER used as a silent substitute:
+   * if ElevenLabs can't play, the app shows why. (Settings → "Device voice backup" can allow it.) */
   async function say(chunks) {
     stop();
     const token = speakToken;
     const list = (Array.isArray(chunks) ? chunks : [chunks]).filter(Boolean);
-    let useEleven = settings().engine === "eleven";
+    const s0 = settings();
+    let useEleven = s0.engine === "eleven";
     for (const text of list) {
       if (token !== speakToken) return false;
       if (useEleven) {
@@ -165,10 +171,13 @@ window.TTS = (function () {
           if (token !== speakToken) return false;
           await playUrl(url, token);
           lastStatus = { engine: "eleven", ok: true, message: "" };
+          ok();
           continue;
         } catch (err) {
+          if (token !== speakToken) return false;
           lastStatus = { engine: "eleven", ok: false, message: err.message };
-          toast("🔇 " + err.message);
+          report(err.message);
+          if (s0.deviceFallback !== "on") return token === speakToken; // stay quiet rather than switch voices
           useEleven = false; // don't keep hitting the API for the rest of this read-out
         }
       } else {

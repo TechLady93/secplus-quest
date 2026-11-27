@@ -40,6 +40,7 @@ Voice answers use the browser's built-in speech recognition (Chrome, Edge, or Sa
 
 - **Default:** your device's built-in voice. It's free and needs no setup.
 - **ElevenLabs:** open ⚙️ Settings → Voice engine → *ElevenLabs*, paste your API key (elevenlabs.io → **Developers → API Keys → + Create Key**, with *Text to Speech: Access* and *Voices: Read*; copy the value that starts with `sk_` from the pop-up, not the Key ID), and you're done. The default voice is **Will (Relaxed Optimist)**, one of ElevenLabs' built-in voices: natural and conversational, easy to listen to for long study sessions. To try others, tap **Load my ElevenLabs voices**.
+- **ElevenLabs stays your voice.** Once a key is saved, the app always uses ElevenLabs and never quietly switches to the robotic device voice. If ElevenLabs can't play, a banner says why. Your key is saved only in that browser, so use **Settings → 🔗 Copy my setup link** and keep the link somewhere private. Opening it on any device restores your key and voice in one tap (the part after `#` is never sent to a server).
   - Your key is stored **only in your browser's localStorage** and is sent only to `api.elevenlabs.io`. It's never in this repo.
   - Generated audio is cached in your browser, so replaying a question doesn't use more credits.
 
